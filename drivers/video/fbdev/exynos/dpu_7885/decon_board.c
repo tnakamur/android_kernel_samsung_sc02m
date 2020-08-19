@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) Samsung Electronics Co., Ltd.
  *
@@ -15,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/regulator/consumer.h>
+#include <linux/blkdev.h>
 #include "../../../../pinctrl/core.h"
 
 #include "decon_board.h"
@@ -97,15 +99,16 @@ run_list(dev, "subnode_4"); pre-configured lcd_pin pinctrl at subnode_1 will be 
 
 /* #define CONFIG_BOARD_DEBUG */
 
-#define DECON_BOARD_DTS_NAME	"decon_board"
+#define BOARD_DTS_NAME	"decon_board"
+#define PANEL_DTS_NAME	"lcd_info"
 
 #if defined(CONFIG_BOARD_DEBUG)
-#define dbg_dbg(fmt, ...)		pr_debug(pr_fmt("%s: %3d: %s: " fmt), DECON_BOARD_DTS_NAME, __LINE__, __func__, ##__VA_ARGS__)
+#define dbg_dbg(fmt, ...)		pr_debug(pr_fmt("%s: %3d: %s: " fmt), BOARD_DTS_NAME, __LINE__, __func__, ##__VA_ARGS__)
 #else
 #define dbg_dbg(fmt, ...)
 #endif
-#define dbg_info(fmt, ...)		pr_info(pr_fmt("%s: %3d: %s: " fmt), DECON_BOARD_DTS_NAME, __LINE__, __func__, ##__VA_ARGS__)
-#define dbg_warn(fmt, ...)		pr_warn(pr_fmt("%s: %3d: %s: " fmt), DECON_BOARD_DTS_NAME, __LINE__, __func__, ##__VA_ARGS__)
+#define dbg_info(fmt, ...)		pr_info(pr_fmt("%s: %3d: %s: " fmt), BOARD_DTS_NAME, __LINE__, __func__, ##__VA_ARGS__)
+#define dbg_warn(fmt, ...)		pr_warn(pr_fmt("%s: %3d: %s: " fmt), BOARD_DTS_NAME, __LINE__, __func__, ##__VA_ARGS__)
 
 #define STREQ(a, b)			(*(a) == *(b) && strcmp((a), (b)) == 0)
 #define STRNEQ(a, b)			(strncmp((a), (b), (strlen(a))) == 0)
@@ -410,7 +413,7 @@ static int decide_subinfo(struct device_node *np, struct action_info *action)
 			goto exit;
 		}
 
-		ret = sscanf(subinfo, "%8d %8d", &action->delay[0], &action->delay[1]);
+		ret = sscanf(subinfo, "%8u %8u", &action->delay[0], &action->delay[1]);
 		if (ret < 0) {
 			dbg_warn("sscanf for delay fail %d %s\n", ret, subinfo);
 			ret = -EINVAL;
@@ -456,7 +459,7 @@ static int decide_subinfo(struct device_node *np, struct action_info *action)
 		break;
 	case ACTION_TIMER_START:
 		timer_name = kzalloc(strlen(subinfo) + 1, GFP_KERNEL);
-		ret = sscanf(subinfo, "%s %8d\n", timer_name, &delay);
+		ret = sscanf(subinfo, "%s %8u\n", timer_name, &delay);
 		if (ret != 2) {
 			dbg_warn("timer start parameter invalid %d %s\n", ret, subinfo);
 			ret = -EINVAL;
@@ -487,6 +490,85 @@ exit:
 	return ret;
 }
 
+static bool of_node_is_recommend(const struct device_node *np)
+{
+	struct property *pp;
+
+	if (!np)
+		return false;
+
+	pp = of_find_property(np, "recommend", NULL);
+
+	return pp ? true : false;
+}
+
+static struct device_node *of_find_lcd_info(struct device *dev)
+{
+	struct device_node *parent = NULL;
+	struct device_node *np = NULL;
+
+	parent = (dev && dev->of_node) ? dev->of_node : NULL;
+	parent = of_find_node_with_property(np, PANEL_DTS_NAME);
+	if (parent)
+		dbg_dbg("%s property is in %s\n", PANEL_DTS_NAME, of_node_full_name(parent));
+
+	np = of_parse_phandle(parent, PANEL_DTS_NAME, 0);
+	if (np)
+		dbg_info("%s property in %s has %s\n", PANEL_DTS_NAME, of_node_full_name(parent), of_node_full_name(np));
+	else
+		dbg_warn("%s of_parse_phandle skip\n", PANEL_DTS_NAME);
+
+	return np;
+}
+
+struct device_node *of_find_recommend_lcd_info(struct device *dev)
+{
+	struct device_node *parent = NULL;
+	struct device_node *np = NULL;
+	int count = 0, i;
+
+	np = of_find_lcd_info(dev);
+	if (of_node_is_recommend(np)) {
+		dbg_dbg("%s is recommended\n", of_node_full_name(np));
+		return np;
+	}
+
+	for_each_node_with_property(parent, PANEL_DTS_NAME) {
+		count = of_count_phandle_with_args(parent, PANEL_DTS_NAME, NULL);
+		for (i = 0; i < count; i++) {
+			np = of_parse_phandle(parent, PANEL_DTS_NAME, i);
+			if (of_node_is_recommend(np)) {
+				dbg_dbg("%s is recommended\n", of_node_full_name(np));
+				return np;
+			}
+		}
+	}
+
+	np = of_find_lcd_info(dev);	/* if fail to find recommend, just return 1st lcd_info */
+	if (np)
+		return np;
+
+	return NULL;
+}
+
+struct device_node *of_find_decon_board(struct device *dev)
+{
+	struct device_node *parent = NULL;
+	struct device_node *np = NULL;
+
+	parent = of_find_recommend_lcd_info(dev);
+	if (!parent)
+		parent = of_find_node_with_property(NULL, BOARD_DTS_NAME);
+
+	np = of_parse_phandle(parent, BOARD_DTS_NAME, 0);
+	if (np)
+		dbg_info("%s property in %s has %s\n", BOARD_DTS_NAME, of_node_full_name(parent), of_node_full_name(np));
+	else
+		dbg_warn("%s of_parse_phandle skip\n", BOARD_DTS_NAME);
+
+	return np;
+}
+
 static int make_list(struct device *dev, struct list_head *lh, const char *name)
 {
 	struct device_node *np = NULL;
@@ -495,30 +577,19 @@ static int make_list(struct device *dev, struct list_head *lh, const char *name)
 	const char *type = NULL;
 	const char *subinfo = NULL;
 
-	np = (dev && dev->of_node) ? dev->of_node : of_find_node_with_property(NULL, DECON_BOARD_DTS_NAME);
-	if (!np) {
-		dbg_warn("%s property does not exist, so create dummy\n", DECON_BOARD_DTS_NAME);
-		action = kzalloc(sizeof(struct action_info), GFP_KERNEL);
-		list_add_tail(&action->node, lh);
-		return -EINVAL;
-	}
-
-	np = of_parse_phandle(np, DECON_BOARD_DTS_NAME, 0);
-	if (!np)
-		dbg_warn("%s node does not exist, so create dummy\n", DECON_BOARD_DTS_NAME);
+	np = of_find_decon_board(dev);
 
 	np = of_find_node_by_name(np, name);
 	if (!np) {
-		dbg_warn("%s node does not exist in %s, so create dummy\n", name, DECON_BOARD_DTS_NAME);
+		dbg_info("%s node does not exist in %s so create dummy\n", name, BOARD_DTS_NAME);
 		action = kzalloc(sizeof(struct action_info), GFP_KERNEL);
 		list_add_tail(&action->node, lh);
-		return -EINVAL;
+		return 0;
 	}
 
 	count = of_property_count_strings(np, "type");
-
 	if (count < 0 || !count || count % 2) {
-		dbg_info("%s node type count %d invalid\n", name, count);
+		dbg_warn("%s node type count %d invalid so create dummy\n", name, count);
 		action = kzalloc(sizeof(struct action_info), GFP_KERNEL);
 		list_add_tail(&action->node, lh);
 		return -EINVAL;
@@ -802,10 +873,45 @@ exit:
 	return ret;
 }
 
+struct platform_device *of_find_device_by_path(const char *name)
+{
+	struct device_node *np = NULL;
+	struct platform_device *pdev = NULL;
+
+	if (!name) {
+		dbg_info("name is null\n");
+		return NULL;
+	}
+
+	np = of_find_node_by_path(name);
+	if (!np) {
+		dbg_info("of_find_node_by_path fail for %s\n", name);
+		return NULL;
+	}
+
+	pdev = of_find_device_by_node(np);
+	if (!pdev) {
+		dbg_info("of_find_device_by_node fail\n");
+		return NULL;
+	}
+
+	return pdev;
+}
+
+struct platform_device *of_find_dsim_platform_device(void)
+{
+	return of_find_device_by_path("dsim0");
+}
+
+struct platform_device *of_find_decon_platform_device(void)
+{
+	return of_find_device_by_path("decon0");
+}
+
 /**
- * of_update_phandle_property - update a phandle property to a device_node pointer
+ * of_update_phandle_property_list - update a phandle property to a device_node pointer
  * @phandle_name: to. Name of property holding a phandle value which will be updated
- * @node_name: from. Name of node which has new phandle value
+ * @node_names: from. Name Array of node which has new phandle value
  *
  * Example:
  *
@@ -815,35 +921,53 @@ exit:
  * phandle2: node2 {
  * }
  *
- * node3 {
+ * phandle3: node3 {
+ * }
+ *
+ * node4 {
  *	phandle_name = <&phandle1>;
  * }
  *
  * To change a device_node using phandle_name like below:
- *	phandle_name = <&phandle2>;
+ *	phandle_name = <&phandle2 &phandle3>;
  *
  * you may call this:
- * of_update_phandle_property("phandle_name", "node2");
+ * char **name_list = { "node1", "node2", NULL }; <- last should be NULL
+ * of_update_phandle_property_list(NULL, "phandle_name", name_list);
  */
-int of_update_phandle_property(const char *phandle_name, const char *node_name)
+int of_update_phandle_property_list(struct device_node *from, const char *phandle_name, const char **node_names)
 {
 	struct device_node *parent = NULL, *node_new = NULL, *node = NULL;
 	struct property *prop_org, *prop_new;
-	int len = 0, ret = 0;
+	int len = 0, ret = 0, count = 0, i = 0;
 	__be32 *pphandle_new = NULL;
 	const __be32 *pphandle_org;
 	phandle phandle_org = 0;
+	char print_buf[50] = {0, };
 
-	parent = of_find_node_with_property(NULL, phandle_name);
-	if (!parent) {
-		dbg_info("of_find_node_with_property fail with %s\n", phandle_name);
+	struct seq_file m = {
+		.buf = print_buf,
+		.size = sizeof(print_buf) - 1,
+	};
+
+	if (!phandle_name) {
+		dbg_info("phandle_name is invalid\n");
 		ret = -EINVAL;
 		goto exit;
 	}
 
-	len = of_count_phandle_with_args(parent, phandle_name, NULL);
-	if (len != 1) {
-		dbg_info("of_count_phandle_with_args fail, count: %d\n", len);
+	while (node_names[count])
+		count++;
+
+	if (count < 1 || count > 10) {
+		dbg_info("node_names count invalid(%d)\n", count);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	parent = from ? from : of_find_node_with_property(NULL, phandle_name);
+	if (!parent) {
+		dbg_info("of_find_node_with_property fail with %s\n", phandle_name);
 		ret = -EINVAL;
 		goto exit;
 	}
@@ -869,34 +993,39 @@ int of_update_phandle_property(const char *phandle_name, const char *node_name)
 		goto exit;
 	}
 
-	node_new = of_find_node_by_name(NULL, node_name);
-	if (!node_new) {
-		dbg_info("of_find_node_by_name fail with %s\n", node_name);
-		ret = -EINVAL;
-		goto exit;
-	}
-
-	if (!node_new->phandle) {
-		dbg_info("%s node has no label for phandle\n", node_new->full_name);
-		ret = -EINVAL;
-		goto exit;
-	}
-
-	if (phandle_org == node_new->phandle) {
-		dbg_info("phandle is same(%d, %d)\n", phandle_org, node_new->phandle);
-		ret = -EINVAL;
-		goto exit;
-	}
-
 	prop_org = of_find_property(parent, phandle_name, &len);
 
 	prop_new = kzalloc(sizeof(struct property), GFP_KERNEL);
 	prop_new->name = kstrdup(prop_org->name, GFP_KERNEL);
-	prop_new->value = kzalloc(prop_org->length, GFP_KERNEL);
-	prop_new->length = prop_org->length;
+	prop_new->value = kcalloc(count, sizeof(phandle), GFP_KERNEL);
+	prop_new->length = sizeof(phandle) * count;
 
 	pphandle_new = prop_new->value;
-	*pphandle_new = be32_to_cpu(node_new->phandle);
+
+	for (i = 0; node_names[i]; i++, pphandle_new++) {
+		node_new = of_find_node_by_name(NULL, node_names[i]);
+		if (!node_new) {
+			dbg_info("of_find_node_by_name fail with %s\n", node_names[i]);
+			kfree(prop_new->value);
+			kfree(prop_new->name);
+			kfree(prop_new);
+			ret = -EINVAL;
+			goto exit;
+		}
+
+		if (!node_new->phandle) {
+			dbg_info("%s node has no label for phandle\n", node_new->full_name);
+			kfree(prop_new->value);
+			kfree(prop_new->name);
+			kfree(prop_new);
+			ret = -EINVAL;
+			goto exit;
+		}
+
+		*pphandle_new = be32_to_cpu(node_new->phandle);
+
+		seq_printf(&m, "%s ", node_names[i]);
+	}
 
 	ret = of_update_property(parent, prop_new);
 	if (ret) {
@@ -908,11 +1037,104 @@ int of_update_phandle_property(const char *phandle_name, const char *node_name)
 		goto exit;
 	}
 
-	dbg_info("%s %s phandle is changed. %d(%s)->%d(%s)\n", of_node_full_name(parent), phandle_name,
-		phandle_org, of_node_full_name(of_find_node_by_phandle(phandle_org)),
-		node_new->phandle, of_node_full_name(of_parse_phandle(parent, phandle_name, 0)));
-
+	dbg_info("%s %s update done. %s\n", of_node_full_name(parent), phandle_name, m.buf);
 exit:
 	return ret;
+}
+
+/**
+ * of_update_phandle_property - update a phandle property to a device_node pointer
+ * @phandle_name: to. Name of property holding a phandle value which will be updated
+ * @node_name: from. Name of node which has new phandle value
+ *
+ * Example:
+ *
+ * phandle1: node1 {
+ * }
+ *
+ * phandle2: node2 {
+ * }
+ *
+ * node3 {
+ *	phandle_name = <&phandle1>;
+ * }
+ *
+ * To change a device_node using phandle_name like below:
+ *	phandle_name = <&phandle2>;
+ *
+ * you may call this:
+ * of_update_phandle_property(NULL, "phandle_name", "node2");
+ */
+int of_update_phandle_property(struct device_node *from, const char *phandle_name, const char *node_name)
+{
+	const char *node_names[2] = { NULL, NULL };
+
+	if (!phandle_name) {
+		dbg_info("phandle_name is invalid\n");
+		return -EINVAL;
+	}
+
+	if (!node_name) {
+		dbg_info("node_name is invalid\n");
+		return -EINVAL;
+	}
+
+	node_names[0] = node_name;
+
+	return of_update_phandle_property_list(from, phandle_name, node_names);
+}
+
+int of_update_phandle_by_index(struct device_node *from, const char *phandle_name, int index)
+{
+	struct device_node *np = NULL;
+
+	np = from ? from : of_find_node_with_property(NULL, phandle_name);
+	if (!np) {
+		dbg_warn("%s property does not exist\n", phandle_name);
+		return -EINVAL;
+	}
+
+	np = of_parse_phandle(np, phandle_name, index);
+	if (!np) {
+		dbg_warn("%s property does not have %dth phandle\n", phandle_name, index);
+		return -EINVAL;
+	}
+
+	return of_update_phandle_property(from, phandle_name, np->name);
+}
+
+static int __of_update_recommend(struct device_node *np, unsigned int recommend)
+{
+	struct property *prop_new = NULL;
+	int ret = 0;
+
+	if (recommend) {
+		prop_new = kzalloc(sizeof(struct property), GFP_KERNEL);
+		if (!prop_new)
+			return -ENOMEM;
+		prop_new->name = "recommend";
+		prop_new->value = "ok";
+		prop_new->length = sizeof("ok");
+
+		ret = of_update_property(np, prop_new);
+	} else {
+		struct property *prop = NULL;
+
+		prop = of_find_property(np, "recommend", NULL);
+		if (prop)
+			ret = of_remove_property(np, prop);
+	}
+
+	return ret;
+}
+
+int of_update_recommend(struct device_node *np)
+{
+	if (!np) {
+		dbg_warn("device node invalid\n");
+		return -EINVAL;
+	}
+
+	return __of_update_recommend(np, 1);
 }
 

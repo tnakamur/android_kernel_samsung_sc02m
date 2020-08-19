@@ -140,13 +140,13 @@ static int himax_mcu_flash_write_burst_lenth(uint8_t *reg_byte, uint8_t *write_d
 
 static int himax_mcu_register_write(uint8_t *write_addr, uint32_t write_length, uint8_t *write_data, uint8_t cfg_flag)
 {
-	int address;
+	unsigned int address;
 	uint8_t tmp_addr[4];
 	uint8_t *tmp_data;
-	int total_read_times = 0;
+	unsigned int total_read_times = 0;
 	uint32_t max_bus_size = MAX_I2C_TRANS_SZ;
 	uint32_t total_size_temp = 0;
-	int i = 0;
+	unsigned int i = 0;
 
 	/*I("%s,Entering\n", __func__);*/
 	if (cfg_flag == 0) {
@@ -230,7 +230,7 @@ static int himax_write_read_reg(uint8_t *tmp_addr, uint8_t *tmp_data, uint8_t hb
 	if (cnt == 99)
 		return HX_RW_REG_FAIL;
 
-	I("Now register 0x%08X : high byte=0x%02X,low byte=0x%02X\n", tmp_addr[3], tmp_data[1], tmp_data[0]);
+	//I("Now register 0x%08X : high byte=0x%02X,low byte=0x%02X\n", tmp_addr[3], tmp_data[1], tmp_data[0]);
 	return NO_ERR;
 }
 
@@ -1109,11 +1109,11 @@ static void himax_mcu_idle_mode(int disable)
 		g_core_fp.fp_register_read(pfw_op->addr_fw_mode_status, DATA_LEN_4, tmp_data, 0);
 
 		if (disable)
-			switch_cmd = pfw_op->data_idle_dis_pwd[0];
+			tmp_data[0] &= ~(1 << 3);
 		else
-			switch_cmd = pfw_op->data_idle_en_pwd[0];
+			tmp_data[0] |= (1 << 3);
 
-		tmp_data[0] = switch_cmd;
+		switch_cmd = tmp_data[0];
 		g_core_fp.fp_register_write(pfw_op->addr_fw_mode_status, DATA_LEN_4, tmp_data, 0);
 		g_core_fp.fp_register_read(pfw_op->addr_fw_mode_status, DATA_LEN_4, tmp_data, 0);
 		I("%s:After turn ON/OFF IDLE Mode [0] = 0x%02X,[1] = 0x%02X,[2] = 0x%02X,[3] = 0x%02X\n",
@@ -1525,46 +1525,38 @@ int hx_mcu_set_edge_border(int set_val)
 	int retry = 10;
 	uint8_t tmp_data[DATA_LEN_4] = { 0 };
 
-	input_info(true, &private_ts->client->dev, "%s %s:Now set_val=%d\n",
+	I("%s %s:Now set_val=%d\n",
 			HIMAX_LOG_TAG, __func__, set_val);
 	do {
 		g_core_fp.fp_register_read(pfw_op->addr_edge_border, DATA_LEN_4,
 				tmp_data, 0);
-		input_info(true, &private_ts->client->dev,
-				"%s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+		I("%s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 				__func__, tmp_data[0], tmp_data[1], tmp_data[2],
 				tmp_data[3]);
 
-		input_info(true, &private_ts->client->dev,
-				"%s Now write value\n", HIMAX_LOG_TAG);
+		I("%s Now write value\n", HIMAX_LOG_TAG);
 
 		tmp_data[0] = set_val;
 		g_core_fp.fp_register_write(pfw_op->addr_edge_border,
 				DATA_LEN_4, tmp_data, false);
-		input_info(true, &private_ts->client->dev,
-				"%s 1. After write value\n", HIMAX_LOG_TAG);
+		I("%s 1. After write value\n", HIMAX_LOG_TAG);
 		g_core_fp.fp_register_read(pfw_op->addr_edge_border, DATA_LEN_4,
 				tmp_data, 0);
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+		I("%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 				HIMAX_LOG_TAG, __func__, tmp_data[0], tmp_data[1],
 				tmp_data[2], tmp_data[3]);
 
-		input_info(true, &private_ts->client->dev,
-				"%s 2. After write value\n", HIMAX_LOG_TAG);
+		I("%s 2. After write value\n", HIMAX_LOG_TAG);
 		g_core_fp.fp_register_read(pfw_op->addr_edge_border, DATA_LEN_4,
 				tmp_data, 0);
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+		I("%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 				HIMAX_LOG_TAG, __func__, tmp_data[0], tmp_data[1],
 				tmp_data[2], tmp_data[3]);
-		input_info(true, &private_ts->client->dev,
-				"%s Now_val=%d, retry times=%d\n", HIMAX_LOG_TAG,
+		I("%s Now_val=%d, retry times=%d\n", HIMAX_LOG_TAG,
 				tmp_data[0], retry);
 	} while (tmp_data[0] != set_val && retry-- > 0);
 	if (retry <= 0 && tmp_data[0] != set_val) {
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Fail to set value=%d!\n", HIMAX_LOG_TAG,
+		I("%s %s:Fail to set value=%d!\n", HIMAX_LOG_TAG,
 				__func__, tmp_data[0]);
 		ret = -1;
 	}
@@ -1579,62 +1571,50 @@ int hx_mcu_set_cal_switch(int set_val)
 	int now_val = 0;
 	uint8_t tmp_data[DATA_LEN_4] = { 0 };
 
-	input_info(true, &private_ts->client->dev, "%s %s:Now set_val=%d\n",
+	I("%s %s:Now set_val=%d\n",
 			HIMAX_LOG_TAG, __func__, set_val);
 	do {
 		g_core_fp.fp_register_read(pfw_op->addr_cal, DATA_LEN_4,
 				tmp_data, 0);
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+		I("%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 				HIMAX_LOG_TAG, __func__, tmp_data[0], tmp_data[1],
 				tmp_data[2], tmp_data[3]);
 
-		input_info(true, &private_ts->client->dev,
-				"%s before write tmp_data[2]=0x%02X\n",
+		I("%s before write tmp_data[2]=0x%02X\n",
 				HIMAX_LOG_TAG, tmp_data[0]);
-		input_info(true, &private_ts->client->dev,
-				"%s Now write value\n", HIMAX_LOG_TAG);
-		input_info(true, &private_ts->client->dev, "%s Sense off\n",
-				HIMAX_LOG_TAG);
+		I("%s Now write value\n", HIMAX_LOG_TAG);
+		I("%s Sense off\n", HIMAX_LOG_TAG);
 		g_core_fp.fp_sense_off(true);
-		input_info(true, &private_ts->client->dev,
-				"%s Disable reload!\n", HIMAX_LOG_TAG);
+		I("%s Disable reload!\n", HIMAX_LOG_TAG);
 		g_core_fp.fp_reload_disable(1);
 		/*clear bit*/
 		tmp_data[0] = tmp_data[0] & 0xFB;	/* force value of 2th bit to zero */
-		input_info(true, &private_ts->client->dev,
-				"%s After clear bit tmp_data[0]=0x%02X\n",
+		I("%s After clear bit tmp_data[0]=0x%02X\n",
 				HIMAX_LOG_TAG, tmp_data[0]);
 
 		tmp_data[0] = tmp_data[0] | (set_val << 2);	/* change the value of 2th bit */
-		input_info(true, &private_ts->client->dev,
-				"%s After assign tmp_data[0]=0x%02X\n",
+		I("%s After assign tmp_data[0]=0x%02X\n",
 				HIMAX_LOG_TAG, tmp_data[0]);
 		g_core_fp.fp_register_write(pfw_op->addr_cal, DATA_LEN_4,
 				tmp_data, false);
 
-		input_info(true, &private_ts->client->dev,
-				"%s After write value\n", HIMAX_LOG_TAG);
+		I("%s After write value\n", HIMAX_LOG_TAG);
 		g_core_fp.fp_register_read(pfw_op->addr_cal, DATA_LEN_4,
 				tmp_data, 0);
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+		I("%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 				HIMAX_LOG_TAG, __func__, tmp_data[0], tmp_data[1],
 				tmp_data[2], tmp_data[3]);
 
-		input_info(true, &private_ts->client->dev, "%s Sense on\n",
-				HIMAX_LOG_TAG);
+		I("%s Sense on\n", HIMAX_LOG_TAG);
 		g_core_fp.fp_sense_on(0x00);
 
 		g_core_fp.fp_register_read(pfw_op->addr_cal, DATA_LEN_4,
 				tmp_data, 0);
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+		I("%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 				HIMAX_LOG_TAG, __func__, tmp_data[0], tmp_data[1],
 				tmp_data[2], tmp_data[3]);
 		now_val = ((tmp_data[0] & 0x04) >> 2);	/* get the 2th bit value of byte[0] */
-		input_info(true, &private_ts->client->dev,
-				"%s %s:Now_val=%d, retry times=%d\n", HIMAX_LOG_TAG,
+		I("%s %s:Now_val=%d, retry times=%d\n", HIMAX_LOG_TAG,
 				__func__, now_val, retry);
 	} while (now_val != set_val && retry-- > 0);
 	return ret;
@@ -1646,23 +1626,19 @@ int hx_mcu_get_rport_thrsh(void)
 	int ret = NO_ERR;
 	uint8_t tmp_data[DATA_LEN_4] = { 0 };
 
-	input_info(true, &private_ts->client->dev, "%s %s:Entering\n",
-			HIMAX_LOG_TAG, __func__);
+	I("%s %s:Entering\n", HIMAX_LOG_TAG, __func__);
 	g_core_fp.fp_register_read(pfw_op->addr_rport_thrsh, DATA_LEN_4,
 			tmp_data, 0);
-	input_info(true, &private_ts->client->dev,
-			"%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
+	I("%s %s:Now [0]=0x%02X,[1]=0x%02X,[2]=0x%02X,[3]=0x%02X\n",
 			HIMAX_LOG_TAG, __func__, tmp_data[0], tmp_data[1],
 			tmp_data[2], tmp_data[3]);
 	ret = tmp_data[3];
 	if (ret == 0x00) {
-		input_info(true, &private_ts->client->dev,
-				"%s Now value=%d, please check FW support this feature or not!\n",
+		I("%s Now value=%d, please check FW support this feature or not!\n",
 				HIMAX_LOG_TAG, ret);
 		ret = -1;
 	}
-	input_info(true, &private_ts->client->dev, "%s %s:End\n", HIMAX_LOG_TAG,
-			__func__);
+	I("%s %s:End\n", HIMAX_LOG_TAG, __func__);
 	return ret;
 }
 #endif
@@ -1987,7 +1963,7 @@ static bool himax_mcu_sram_verify(uint8_t *FW_File, int FW_Size)
 
 static bool himax_mcu_get_DSRAM_data(uint8_t *info_data, bool DSRAM_Flag)
 {
-	int i = 0;
+	unsigned int i = 0;
 	unsigned char tmp_addr[ADDR_LEN_4];
 	unsigned char tmp_data[DATA_LEN_4];
 	uint8_t max_i2c_size = MAX_I2C_TRANS_SZ;
@@ -2025,8 +2001,8 @@ static bool himax_mcu_get_DSRAM_data(uint8_t *info_data, bool DSRAM_Flag)
 
 	/* 3. Read RawData */
 	total_size_temp = total_size;
-	I("%s: tmp_data[0] = 0x%02X,tmp_data[1] = 0x%02X,tmp_data[2] = 0x%02X,tmp_data[3] = 0x%02X\n",
-	  __func__, psram_op->addr_rawdata_addr[0], psram_op->addr_rawdata_addr[1], psram_op->addr_rawdata_addr[2], psram_op->addr_rawdata_addr[3]);
+	/*I("%s: tmp_data[0] = 0x%02X,tmp_data[1] = 0x%02X,tmp_data[2] = 0x%02X,tmp_data[3] = 0x%02X\n",
+	  __func__, psram_op->addr_rawdata_addr[0], psram_op->addr_rawdata_addr[1], psram_op->addr_rawdata_addr[2], psram_op->addr_rawdata_addr[3]);*/
 	tmp_addr[0] = psram_op->addr_rawdata_addr[0];
 	tmp_addr[1] = psram_op->addr_rawdata_addr[1];
 	tmp_addr[2] = psram_op->addr_rawdata_addr[2];
@@ -2408,7 +2384,7 @@ static int hx_read_guest_info(void)
 	/* uint32_t temp_addr = 0; */
 	uint8_t temp_str[128];
 	int i = 0;
-	int custom_info_temp = 0;
+	unsigned int custom_info_temp = 0;
 	int checksum = 0;
 
 	himax_guest_info_set_status(1);
@@ -2497,9 +2473,8 @@ static int hx_read_guest_info(void)
 #if defined(HX_SMART_WAKEUP) || defined(HX_HIGH_SENSE) || defined(HX_USB_DETECT_GLOBAL)
 static void himax_mcu_resend_cmd_func(bool suspended)
 {
-#if defined(HX_SMART_WAKEUP) || defined(HX_HIGH_SENSE)
 	struct himax_ts_data *ts = private_ts;
-#endif
+
 #ifdef HX_SMART_WAKEUP
 	g_core_fp.fp_set_SMWP_enable(ts->SMWP_enable, suspended);
 #endif
@@ -2507,7 +2482,7 @@ static void himax_mcu_resend_cmd_func(bool suspended)
 	g_core_fp.fp_set_HSEN_enable(ts->HSEN_enable, suspended);
 #endif
 #ifdef HX_USB_DETECT_GLOBAL
-	himax_cable_detect_func(true);
+	himax_cable_detect_func(ts->usb_connected);
 #endif
 }
 #endif

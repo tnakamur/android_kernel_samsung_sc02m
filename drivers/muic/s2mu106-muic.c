@@ -1042,7 +1042,23 @@ static int s2mu106_if_check_usb_killer(void *mdata)
 #if IS_ENABLED(CONFIG_S2MU106_TYPEC_WATER)
 #if !IS_ENABLED(CONFIG_S2MU106_IFCONN_HOUSE_NOT_GND)
 	int wait_ret = 0;
+#endif
+#endif
+	/* vbus discharing off when cc attach event */
+	if (muic_data->discharging_en) {
+		if (gpio_is_valid(muic_data->vbus_discharging)) {
+			if (muic_data->discharging) {
+				pr_info("%s, discharging forced finished, flush wq\n", __func__);
+				muic_data->discharging = 0;
+				gpio_direction_output(muic_data->vbus_discharging, 0);
+				flush_workqueue(muic_data->discharging_wq);
+				flush_workqueue(muic_data->discharging_start_wq);
+			}
+		}
+	}
 
+#if IS_ENABLED(CONFIG_S2MU106_TYPEC_WATER)
+#if !IS_ENABLED(CONFIG_S2MU106_IFCONN_HOUSE_NOT_GND)
 	if (muic_data->water_status != S2MU106_WATER_MUIC_IDLE)
 		return MUIC_ABNORMAL_OTG;
 
@@ -2266,6 +2282,18 @@ static irqreturn_t s2mu106_muic_vbus_on_isr(int irq, void *data)
 
 	pr_info("%s start(%s)\n", __func__, dev_to_str(muic_pdata->attached_dev));
 
+	if (muic_data->discharging_en) {
+		if (gpio_is_valid(muic_data->vbus_discharging)) {
+			if (muic_data->discharging) {
+				pr_info("%s, discharging forced finished, flush wq\n", __func__);
+				muic_data->discharging = 0;
+				gpio_direction_output(muic_data->vbus_discharging, 0);
+				flush_workqueue(muic_data->discharging_wq);
+				flush_workqueue(muic_data->discharging_start_wq);
+			}
+		}
+	}
+
 	s2mu106_muic_get_detect_info(muic_data);
 #if IS_ENABLED(CONFIG_S2MU106_TYPEC_WATER)
 	if (s2mu106_muic_is_opmode_typeC(muic_data)) {
@@ -2316,6 +2344,33 @@ static irqreturn_t s2mu106_muic_vbus_on_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void s2mu106_muic_discharging_handler(struct work_struct *work)
+{
+	struct s2mu106_muic_data *muic_data =
+	    container_of(work, struct s2mu106_muic_data, discharging_handler.work);
+
+	if (!muic_data->discharging)
+		return;
+	muic_data->discharging = 0;
+	pr_info("%s, discharging finished\n", __func__);
+	gpio_direction_output(muic_data->vbus_discharging, 0);
+
+	return;
+}
+
+static void s2mu106_muic_discharging_start_handler(struct work_struct *work)
+{
+	struct s2mu106_muic_data *muic_data =
+	    container_of(work, struct s2mu106_muic_data, discharging_start_handler.work);
+
+	if (!muic_data->discharging)
+		return;
+	pr_info("%s, discharging start\n", __func__);
+	gpio_direction_output(muic_data->vbus_discharging, 1);
+
+	return;
+}
+
 static irqreturn_t s2mu106_muic_vbus_off_isr(int irq, void *data)
 {
 	struct s2mu106_muic_data *muic_data = data;
@@ -2350,9 +2405,10 @@ static irqreturn_t s2mu106_muic_vbus_off_isr(int irq, void *data)
 
 	if (muic_data->discharging_en) {
 		if (gpio_is_valid(muic_data->vbus_discharging)) {
-			gpio_direction_output(muic_data->vbus_discharging, 1);
-			msleep(120);
-			gpio_direction_output(muic_data->vbus_discharging, 0);
+			pr_info("%s, discharging start after 300ms\n", __func__);
+			muic_data->discharging = 1;
+			queue_delayed_work(muic_data->discharging_start_wq, &muic_data->discharging_start_handler, 300);
+			queue_delayed_work(muic_data->discharging_wq, &muic_data->discharging_handler, 500); 
 		}
 	}
 
@@ -2387,6 +2443,7 @@ static irqreturn_t s2mu106_muic_vbus_off_isr(int irq, void *data)
 		if (muic_core_get_ccic_cable_state(muic_pdata)
 				&& muic_if->is_ccic_attached == false) {
 #if IS_ENABLED(CONFIG_S2MU106_TYPEC_WATER)
+			_s2mu106_muic_control_rid_adc(muic_data, MUIC_ENABLE);
 			_s2mu106_muic_set_int_mask(muic_data, 0x3, 0x0, 0x0, 0x0);
 #endif
 			muic_core_handle_detach(muic_data->pdata);
@@ -2830,6 +2887,7 @@ static int s2mu106_muic_probe(struct platform_device *pdev)
 
 	if (muic_data->discharging_en)
 		gpio_request(muic_data->vbus_discharging, "s2mu106-discharging");
+	muic_data->discharging = 0;
 
 	mutex_init(&muic_data->muic_mutex);
 	mutex_init(&muic_data->switch_mutex);
@@ -2884,6 +2942,19 @@ static int s2mu106_muic_probe(struct platform_device *pdev)
 #endif /* CONFIG_HV_MUIC_S2MU106_AFC */
 
 	pr_info("%s muic_if->opmode(%d)\n", __func__, muic_if->opmode);
+
+	muic_data->discharging_wq = alloc_workqueue("s2mu106_muic", WQ_MEM_RECLAIM, 1);
+	if (!muic_data->discharging_wq) {
+		pr_err("%s, fail to create workqueue\n", __func__);
+		goto fail;
+	}
+	muic_data->discharging_start_wq = alloc_workqueue("s2mu106_muic", WQ_MEM_RECLAIM, 1);
+	if (!muic_data->discharging_start_wq) {
+		pr_err("%s, fail to create workqueue\n", __func__);
+		goto fail;
+	}
+	INIT_DELAYED_WORK(&muic_data->discharging_handler, s2mu106_muic_discharging_handler);
+	INIT_DELAYED_WORK(&muic_data->discharging_start_handler, s2mu106_muic_discharging_start_handler);
 
 	INIT_DELAYED_WORK(&muic_data->dcd_recheck, s2mu106_muic_dcd_recheck);
 	INIT_DELAYED_WORK(&muic_data->rescan_validity_checker,

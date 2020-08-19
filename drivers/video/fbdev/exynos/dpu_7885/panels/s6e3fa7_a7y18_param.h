@@ -319,6 +319,26 @@ enum {
 	ALPM_MODE_MAX
 };
 
+enum {
+	AOD_MODE_OFF,
+	AOD_MODE_ALPM,
+	AOD_MODE_HLPM,
+	AOD_MODE_MAX
+};
+
+static unsigned int lpm_old_table[ALPM_MODE_MAX] = {
+	ALPM_OFF,
+	HLPM_ON_LOW,
+	HLPM_ON_LOW,
+	ALPM_ON_HIGH,
+	HLPM_ON_HIGH,
+};
+
+static unsigned int lpm_brightness_table[EXTEND_BRIGHTNESS + 1] = {
+	[0 ... 93]			= HLPM_ON_LOW,
+	[94 ... EXTEND_BRIGHTNESS]	= HLPM_ON_HIGH,
+};
+
 static unsigned char SEQ_AOR_CONTROL_HLPM_ON[] = {
 	0xB1,
 	0x08, 0x97	/* AOR 98.17% */

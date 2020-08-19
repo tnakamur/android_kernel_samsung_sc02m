@@ -89,6 +89,12 @@ config TOUCHSCREEN_HIMAX_IC_HX83102
 		help
 		This enables support for HIMAX CHIPSET of HX83102.
 
+config SEC_AOT
+        tristate "HIMAX chipset HX83102 function"
+		depends on TOUCHSCREEN_HIMAX_INCELL_CORE
+		help
+		This enables support for notify AOT to LCD.
+
 # ***************** In-cell End *******************
 
 config TOUCHSCREEN_HIMAX_DEBUG

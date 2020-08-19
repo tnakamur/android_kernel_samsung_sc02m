@@ -32,9 +32,16 @@
 
 #if defined(CONFIG_TOUCHSCREEN_HIMAX_DEBUG)
 #define D(x...) pr_debug("[HXTP] " x)
+#if defined(CONFIG_TOUCHSCREEN_HIMAX_SPI)
+#define I(x...) input_info(true, &private_ts->spi->dev, "[HXTP] " x)
+#define E(x...) input_err(true, &private_ts->spi->dev, "[HXTP] " x)
+#else
 #define I(x...) pr_info("[HXTP] " x)
-#define W(x...) pr_warn("[HXTP][WARNING] " x)
 #define E(x...) pr_err("[HXTP][ERROR] " x)
+#endif
+#define KI(x...) pr_info("[HXTP] " x)
+#define W(x...) pr_warn("[HXTP][WARNING] " x)
+#define KE(x...) pr_err("[HXTP][ERROR] " x)
 #define DIF(x...) \
 do { \
 	if (debug_flag) \
@@ -84,6 +91,9 @@ struct himax_i2c_platform_data {
 	int abs_width_max;
 	int screenWidth;
 	int screenHeight;
+	u32 area_indicator;
+	u32 area_navigation;
+	u32 area_edge;
 	uint8_t fw_version;
 	uint8_t tw_id;
 	uint8_t powerOff3V3;
@@ -99,6 +109,7 @@ struct himax_i2c_platform_data {
 	struct kobject *vk_obj;
 	struct kobj_attribute *vk2Use;
 	int hx_config_size;
+	bool support_aot;
 
 	const char *i_CTPM_firmware_name;
 	const char *proj_name;

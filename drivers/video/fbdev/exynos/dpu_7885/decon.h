@@ -1065,7 +1065,7 @@ struct decon_device {
 	unsigned int ignore_vsync;
 	struct abd_protect abd;
 	unsigned int esd_recovery;
-	atomic_t win_config;
+	atomic_t ffu_flag;	/* first frame update */
 
 #if defined(CONFIG_EXYNOS_DOZE)
 	unsigned int doze_state;
@@ -1074,6 +1074,8 @@ struct decon_device {
 #if defined(CONFIG_SUPPORT_MASK_LAYER)
 	bool current_mask_layer;
 	struct decon_reg_data *mask_regs;
+	u32 wait_mask_layer_trigger;
+	wait_queue_head_t wait_mask_layer_trigger_queue;
 #endif
 
 	unsigned long prev_used_dpp;

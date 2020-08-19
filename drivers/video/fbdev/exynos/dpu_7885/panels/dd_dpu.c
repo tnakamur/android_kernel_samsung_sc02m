@@ -40,7 +40,7 @@ __XX(PMSK_P,		"timing,pmsk",		"pms",			0600)	\
 __XX(PMSK_M,		"",			"",			0)	\
 __XX(PMSK_S,		"",			"",			0)	\
 __XX(PMSK_K,		"",			"",			0)	\
-__XX(HS_CLK,		"timing,dsi-hs-clk",	"hs_clk",		0600)	\
+__XX(HS_CLK,		"timing,dsi-hs-clk",	"hs_clk",		0400)	\
 __XX(ESC_CLK,		"timing,dsi-escape-clk",	"esc_clk",	0400)	\
 __XX(HBP,		"timing,h-porch",	"hporch",		0600)	\
 __XX(HFP,		"",			"",			0)	\

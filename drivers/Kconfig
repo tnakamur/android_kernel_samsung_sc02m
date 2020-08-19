@@ -232,6 +232,10 @@ source "drivers/motor/Kconfig"
 
 source "drivers/five/Kconfig"
 
-source "drivers/icdrv/Kconfig"
+source "drivers/security/samsung/icdrv/Kconfig"
+
+source "drivers/gator/Kconfig"
+
+source "drivers/security/samsung/tzic/Kconfig"
 
 endmenu

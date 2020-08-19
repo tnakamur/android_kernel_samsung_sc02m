@@ -415,7 +415,7 @@ static ssize_t himax_debug_level_read(char *buf, size_t len)
 		ts_data->debug_log_level);
 
 	if (copy_to_user(buf, buf_tmp, (len > BUF_SIZE)?BUF_SIZE:len))
-		input_info(true, &private_ts->client->dev, "%s,here:%d\n", __func__, __LINE__);
+		I("%s,here:%d\n", __func__, __LINE__);
 
 	return ret;
 }
@@ -423,7 +423,7 @@ static ssize_t himax_debug_level_read(char *buf, size_t len)
 static ssize_t himax_debug_level_write(char *buf, size_t len)
 {
 	struct himax_ts_data *ts;
-	int i;
+	unsigned int i;
 
 	ts = private_ts;
 
@@ -830,7 +830,7 @@ void himax_log_touch_event(struct himax_ts_data *ts, int start)
 			&& g_target_report_data->y[loop_i] >= 0
 			&& g_target_report_data->y[loop_i]
 			<= ts->pdata->abs_y_max) {
-				input_info(true, &ts->client->dev, "Finger %d=> X:%d, Y:%d W:%d, Z:%d, F:%d,Int_Delay_Counter:%d\n",
+				I("Finger %d=> X:%d, Y:%d W:%d, Z:%d, F:%d,Int_Delay_Counter:%d\n",
 				  loop_i + 1,
 				  g_target_report_data->x[loop_i],
 				  g_target_report_data->y[loop_i],
@@ -843,9 +843,9 @@ void himax_log_touch_event(struct himax_ts_data *ts, int start)
 		}
 	} else if (g_target_report_data->finger_on == 0 &&
 			g_target_report_data->finger_num == 0) {
-		input_info(true, &ts->client->dev, "All Finger leave\n");
+		I("All Finger leave\n");
 	} else {
-		input_info(true, &ts->client->dev, "%s : wrong input!\n", __func__);
+		I("%s : wrong input!\n", __func__);
 	}
 }
 void himax_log_touch_int_devation(int touched)
@@ -2286,8 +2286,6 @@ static ssize_t himax_debug_write(struct file *file, const char *buff,
 	if (copy_from_user(buf, buff, len))
 		return -EFAULT;
 
-	buf[strlen(buf) - 1] = 0;/*remove \n*/
-
 	while (dbg_cmd_str[i]) {
 		str_ptr = strnstr(buf, dbg_cmd_str[i], len);
 		if (str_ptr) {
@@ -2675,17 +2673,15 @@ int himax_touch_proc_init(void)
 
 	return 0;
 #if defined(HX_PEN_FUNC_EN)
-	remove_proc_entry(HIMAX_PROC_PEN_POS_FILE, himax_touch_proc_dir);
-fail_5:
+fail_5: remove_proc_entry(HIMAX_PROC_FLASH_DUMP_FILE, himax_touch_proc_dir);
 #endif
-remove_proc_entry(HIMAX_PROC_FLASH_DUMP_FILE, himax_touch_proc_dir);
 fail_4: remove_proc_entry(HIMAX_PROC_DEBUG_FILE, himax_touch_proc_dir);
-fail_3:	remove_proc_entry(HIMAX_PROC_BANK_FILE, himax_proc_diag_dir);
+fail_3: remove_proc_entry(HIMAX_PROC_BANK_FILE, himax_proc_diag_dir);
 fail_2_4: remove_proc_entry(HIMAX_PROC_DC_FILE, himax_proc_diag_dir);
 fail_2_3: remove_proc_entry(HIMAX_PROC_IIR_FILE, himax_proc_diag_dir);
 fail_2_2: remove_proc_entry(HIMAX_PROC_STACK_FILE, himax_proc_diag_dir);
 fail_2_1: remove_proc_entry(HIMAX_PROC_VENDOR_FILE, himax_touch_proc_dir);
-fail_1:
+fail_1: remove_proc_entry(HIMAX_PROC_DIAG_FOLDER, himax_touch_proc_dir);
 	return -ENOMEM;
 }
 
@@ -2703,46 +2699,23 @@ void himax_touch_proc_deinit(void)
 	remove_proc_entry(HIMAX_PROC_VENDOR_FILE, himax_touch_proc_dir);
 }
 
-int hx_set_sram_raw(int set_val)
+int hx_set_stack_raw(int set_val)
 {
 	int ret = NO_ERR;
-
+	if (dsram_flag) {
+		/*Cancal work queue and return to stack*/
+		process_type = 0;
+		dsram_flag = false;
+		cancel_delayed_work(&private_ts->himax_diag_delay_wrok);
+		himax_int_enable(1);
+		g_core_fp.fp_return_event_stack();
+	}
 	if (set_val) {
-		if (dsram_flag) {
-			input_info(true, &private_ts->client->dev,
-					"%s Now is turning on\n", HIMAX_LOG_TAG);
-		} else {
-			/* (0) urn on flag*/
-			dsram_flag = true;
-			/* (1) Disable INT*/
-			himax_int_enable(0);
-			/* (2) Change rawout select*/
-			private_ts->diag_cmd = HX_NOISE_SELCT + HX_DSRAM_EN;
-			g_core_fp.fp_diag_register_set(HX_NOISE_SELCT,
-					HX_DSRAM_EN);
-			/* (3) Run thread to get rawdata */
-			queue_delayed_work(private_ts->himax_diag_wq,
-					&private_ts->himax_diag_delay_wrok,
-					2 * HZ / 100);
-		}
+		private_ts->diag_cmd = 1;
+		g_core_fp.fp_diag_register_set(private_ts->diag_cmd, 0);
 	} else {
-		if (dsram_flag) {
-			/* (1) Clear DSRAM flag */
-			dsram_flag = false;
-			/* (2) Stop DSRAM thread */
-			private_ts->diag_cmd = HX_DSRAM_DIS + HX_NORMAL_SELCT;
-			g_core_fp.fp_diag_register_set(HX_DSRAM_DIS,
-					HX_NORMAL_SELCT);
-			cancel_delayed_work(&private_ts->himax_diag_delay_wrok);
-			/* (3) FW leave sram and return to event stack*/
-			g_core_fp.fp_return_event_stack();
-			/* (4) Enable ISR */
-			himax_int_enable(1);
-
-		} else {
-			input_info(true, &private_ts->client->dev,
-					"%s Now is turning off!\n", HIMAX_LOG_TAG);
-		}
+		private_ts->diag_cmd = 0;
+		g_core_fp.fp_diag_register_set(private_ts->diag_cmd, 0);
 	}
 	return ret;
 }
@@ -2750,7 +2723,6 @@ int hx_set_sram_raw(int set_val)
 int himax_debug_init(void)
 {
 	struct himax_ts_data *ts = private_ts;
-	int err = 0;
 
 	I("%s:Enter\n", __func__);
 
@@ -2761,13 +2733,11 @@ int himax_debug_init(void)
 
 	reg_read_data = kzalloc(128 * sizeof(uint8_t), GFP_KERNEL);
 	if (reg_read_data == NULL) {
-		err = -ENOMEM;
 		goto err_alloc_reg_read_data_fail;
 	}
 
 	debug_data = kzalloc(sizeof(struct himax_debug), GFP_KERNEL);
 	if (debug_data == NULL) { /*Allocate debug data space*/
-		err = -ENOMEM;
 		goto err_alloc_debug_data_fail;
 	}
 
@@ -2777,7 +2747,6 @@ int himax_debug_init(void)
 
 	if (!ts->flash_wq) {
 		E("%s: create flash workqueue failed\n", __func__);
-		err = -ENOMEM;
 		goto err_create_flash_dump_wq_failed;
 	}
 
@@ -2785,12 +2754,18 @@ int himax_debug_init(void)
 
 	g_flash_progress = START;
 	setFlashBuffer();
+	if (flash_buffer == NULL) {
+		E("%s: flash buffer allocate fail failed\n", __func__);
+		goto err_flash_buf_alloc_failed;
+	}
 
 #ifdef HX_TP_PROC_GUEST_INFO
 
 	if (g_guest_info_data == NULL) {
 		g_guest_info_data = kzalloc(sizeof(struct hx_guest_info),
 					GFP_KERNEL);
+		if (g_guest_info_data == NULL)
+			goto err_guest_info_alloc_failed;
 		g_guest_info_data->g_guest_info_ongoing = 0;
 		g_guest_info_data->g_guest_info_type = 0;
 	}
@@ -2799,7 +2774,6 @@ int himax_debug_init(void)
 		create_singlethread_workqueue("himax_guest_info_wq");
 	if (!ts->guest_info_wq) {
 		E("%s: create guest info workqueue failed\n", __func__);
-		err = -ENOMEM;
 		goto err_create_guest_info_wq_failed;
 	}
 	INIT_WORK(&ts->guest_info_work, himax_ts_guest_info_work_func);
@@ -2809,7 +2783,6 @@ int himax_debug_init(void)
 
 	if (!ts->himax_diag_wq) {
 		E("%s: create diag workqueue failed\n", __func__);
-		err = -ENOMEM;
 		goto err_create_diag_wq_failed;
 	}
 
@@ -2818,19 +2791,19 @@ int himax_debug_init(void)
 	setMutualBuffer(ic_data->HX_RX_NUM, ic_data->HX_TX_NUM);
 	if (getMutualBuffer() == NULL) {
 		E("%s: mutual buffer allocate fail failed\n", __func__);
-		return MEM_ALLOC_FAIL;
+		goto err_mut_buf_alloc_failed;
 	}
 
 	setMutualNewBuffer(ic_data->HX_RX_NUM, ic_data->HX_TX_NUM);
 	if (getMutualNewBuffer() == NULL) {
 		E("%s: mutual new buffer allocate fail failed\n", __func__);
-		return MEM_ALLOC_FAIL;
+		goto err_mut_new_alloc_failed;
 	}
 
 	setMutualOldBuffer(ic_data->HX_RX_NUM, ic_data->HX_TX_NUM);
 	if (getMutualOldBuffer() == NULL) {
 		E("%s: mutual old buffer allocate fail failed\n", __func__);
-		return MEM_ALLOC_FAIL;
+		goto err_mut_old_alloc_failed;
 	}
 
 #ifdef HX_TP_PROC_2T2R
@@ -2841,30 +2814,47 @@ int himax_debug_init(void)
 		if (getMutualBuffer_2() == NULL) {
 			E("%s: mutual buffer 2 allocate fail failed\n",
 			  __func__);
-			return MEM_ALLOC_FAIL;
+			goto err_mut_buf2_alloc_failed;
 		}
 	}
 #endif
 
-	himax_touch_proc_init();
+	if (himax_touch_proc_init())
+		goto err_proc_init_failed;
 
 	return 0;
-
+err_proc_init_failed:
+#if defined(HX_TP_PROC_2T2R)
+	kfree(diag_mutual_2);
+	diag_mutual_2 = NULL;
+err_mut_buf2_alloc_failed:
+#endif
+	kfree(diag_mutual_old);
+	diag_mutual_old = NULL;
+err_mut_old_alloc_failed:
+	kfree(diag_mutual_new);
+	diag_mutual_new = NULL;
+err_mut_new_alloc_failed:
+	kfree(diag_mutual);
+	diag_mutual = NULL;
+err_mut_buf_alloc_failed:
 	cancel_delayed_work_sync(&ts->himax_diag_delay_wrok);
 	destroy_workqueue(ts->himax_diag_wq);
 err_create_diag_wq_failed:
 
 #ifdef HX_TP_PROC_GUEST_INFO
 err_create_guest_info_wq_failed:
-
 	destroy_workqueue(ts->guest_info_wq);
 	if (g_guest_info_data != NULL) {
 		kfree(g_guest_info_data);
 		g_guest_info_data = NULL;
 	}
+err_guest_info_alloc_failed:
 #endif
+	kfree(flash_buffer);
+	flash_buffer = NULL;
+err_flash_buf_alloc_failed:
 	destroy_workqueue(ts->flash_wq);
-
 err_create_flash_dump_wq_failed:
 	kfree(debug_data);
 	debug_data = NULL;
@@ -2872,7 +2862,7 @@ err_alloc_debug_data_fail:
 	kfree(reg_read_data);
 	reg_read_data = NULL;
 err_alloc_reg_read_data_fail:
-	return err;
+	return -ENOMEM;
 }
 EXPORT_SYMBOL(himax_debug_init);
 

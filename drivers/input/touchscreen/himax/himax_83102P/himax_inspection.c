@@ -15,9 +15,9 @@
 
 #include "himax_inspection.h"
 
-static int g_gap_vertical_partial = 3;
+static int g_gap_vertical_partial = 4;
 static int *g_gap_vertical_part;
-static int g_gap_horizontal_partial = 3;
+static int g_gap_horizontal_partial = 1;
 static int *g_gap_horizontal_part;
 
 static int g_dc_max;
@@ -33,8 +33,9 @@ int HX_CRITERIA_SIZE;
 char *g_rslt_data;
 static char g_file_path[256];
 static char g_rslt_log[256];
-static char g_start_log[256];
+static char g_start_log[512];
 #define FAIL_IN_INDEX "%s: %s FAIL in index %d\n"
+#define ABS(x)  (((x) < 0) ? -(x) : (x))
 
 char *g_hx_head_str[] = {
 	"TP_Info",
@@ -131,6 +132,11 @@ char *g_hx_inspt_crtra_name[] = {
 /* SEC INSPECTION */
 extern int g_ts_dbg;
 
+/* Notify AOT to LCD */
+#if defined(CONFIG_SEC_AOT)
+int aot_enabled;
+EXPORT_SYMBOL(aot_enabled);
+#endif
 
 extern struct fw_operation *pfw_op;
 /******************/
@@ -218,8 +224,8 @@ static int hx_test_data_pop_out(char *rslt_buf, char *filepath)
 	set_fs(get_ds());
 	vfs_write(raw_file, rslt_buf,
 		 g_1kind_raw_size * HX_CRITERIA_ITEM * sizeof(char), &pos);
-	if (raw_file != NULL)
-		filp_close(raw_file, NULL);
+
+	filp_close(raw_file, NULL);
 
 	set_fs(fs);
 
@@ -233,7 +239,7 @@ static int hx_test_data_get(uint32_t RAW[], char *start_log, char *result,
 {
 	uint32_t i;
 
-	ssize_t len = 0;
+	uint32_t len = 0;
 	char *testdata = NULL;
 	uint32_t SZ_SIZE = g_1kind_raw_size;
 
@@ -396,10 +402,6 @@ static uint32_t himax_get_rawdata(uint32_t RAW[], uint32_t datalen, uint8_t chec
 	/* Copy Data*/
 	for (i = 0; i < ic_data->HX_TX_NUM*ic_data->HX_RX_NUM; i++) {
 		RAW[i] = tmp_rawdata[(i * 2) + 1] * 256 + tmp_rawdata[(i * 2)];
-	#ifdef SEC_FACTORY_MODE
-		if (checktype == HIMAX_ABS_NOISE)
-			RAW[i] = (int16_t)RAW[i];
-	#endif
 	}
 
 	for (j = 0; j < ic_data->HX_RX_NUM; j++) {
@@ -575,7 +577,6 @@ static void himax_set_N_frame(uint16_t Nframe, uint8_t checktype)
 		checktype == HIMAX_LPWUG_ABS_NOISE)
 		himax_neg_noise_sup(tmp_data);
 
-	g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
 }
 
 static void himax_get_noise_base(uint8_t checktype)/*Normal Threshold*/
@@ -821,9 +822,9 @@ static uint32_t himax_wait_sorting_mode(uint8_t checktype)
 		g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
 		I(TEMP_LOG, __func__, "0x10007F40",
 			tmp_data[0], tmp_data[1], tmp_data[2], tmp_data[3]);
-		I("Now retry %d times!\n", count++);
+		I("Now retry %d times!\n", count);
 		msleep(50);
-	} while (count < 50);
+	} while (count++ < 50);
 
 	return HX_INSPECT_ESWITCHMODE;
 }
@@ -835,40 +836,35 @@ static int hx_turn_on_mp_func(int on)
 	uint8_t tmp_addr[4] = {0};
 	uint8_t tmp_data[4] = {0};
 	uint8_t tmp_read[4] = {0};
-	/* char *tmp_chipname = private_ts->chip_name; */
 
-	himax_in_parse_assign_cmd(addr_ctrl_mpap_ovl, tmp_addr, sizeof(tmp_addr));
-	if (on) {
-		I("%s : Turn on!\n", __func__);
-			if (strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0) {
-				I("%s: need to enter Mp mode!\n", __func__);
-				himax_in_parse_assign_cmd(PWD_TURN_ON_MPAP_OVL, tmp_data, sizeof(tmp_data));
-				do {
-					g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
-					usleep_range(10000, 10001);
-					g_core_fp.fp_register_read(tmp_addr, 4, tmp_read, false);
-					I("%s: now read[2]=0x%02X, read[1]=0x%02X, read[0]=0x%02X!\n",
-					__func__, tmp_read[2], tmp_read[1], tmp_read[0]);
-					retry--;
-				} while (((retry > 0) && (tmp_read[2] != tmp_data[2] && tmp_read[1] != tmp_data[1] && tmp_read[0] != tmp_data[0])));
+	if (strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0) { /* Only HX83102D needs this flow */
+		I("%s: need to enter Mp mode!\n", __func__);
+		himax_in_parse_assign_cmd(addr_ctrl_mpap_ovl, tmp_addr, sizeof(tmp_addr));
+		if (on) {
+			I("%s : Turn on!\n", __func__);
+			himax_in_parse_assign_cmd(PWD_TURN_ON_MPAP_OVL, tmp_data, sizeof(tmp_data));
+			do {
+				g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
+				usleep_range(10000, 10001);
+				g_core_fp.fp_register_read(tmp_addr, 4, tmp_read, false);
+				I("%s: now read[2]=0x%02X, read[1]=0x%02X, read[0]=0x%02X!\n",
+				__func__, tmp_read[2], tmp_read[1], tmp_read[0]);
+				retry--;
+			} while (((retry > 0) && (tmp_read[2] != tmp_data[2] && tmp_read[1] != tmp_data[1] && tmp_read[0] != tmp_data[0])));
 		} else {
-			I("%s:Nothing to be done!\n", __func__);
-		}
-	} else {
-		I("%s : Turn off!\n", __func__);
-		if (strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0) {
-			I("%s: need to enter Mp mode!\n", __func__);
+			I("%s : Turn off!\n", __func__);
 			himax_in_parse_assign_cmd(ic_cmd_rst, tmp_data, sizeof(tmp_data));
 			do {
 				g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
 				usleep_range(10000, 10001);
 				g_core_fp.fp_register_read(tmp_addr, 4, tmp_read, false);
-				I("%s: now read[2]=0x%02X, read[1]=0x%02X, read[0]=0x%02X!\n", __func__, tmp_read[2], tmp_read[1], tmp_read[0]);
+				I("%s: now read[2]=0x%02X, read[1]=0x%02X, read[0]=0x%02X!\n",
+				__func__, tmp_read[2], tmp_read[1], tmp_read[0]);
 				retry--;
 			} while ((retry > 0) && (tmp_read[2] != tmp_data[2] && tmp_read[1] != tmp_data[1] && tmp_read[0] != tmp_data[0]));
-		} else {
-			I("%s Nothing to be done!\n", __func__);
 		}
+	} else {
+		I("%s:Nothing to be done!\n", __func__);
 	}
 	return rslt;
 }
@@ -888,8 +884,9 @@ static int himax_gap_test_vertical_setting(void)
 		return MEM_ALLOC_FAIL;
 	}
 	g_gap_vertical_part[0] = 0;
-	g_gap_vertical_part[1] = 4;
-	g_gap_vertical_part[2] = 8;
+	g_gap_vertical_part[1] = ic_data->HX_TX_NUM / 4 * 1;
+	g_gap_vertical_part[2] = ic_data->HX_TX_NUM / 4 * 2;
+	g_gap_vertical_part[3] = ic_data->HX_TX_NUM / 4 * 3;
 
 	return NO_ERR;
 }
@@ -907,13 +904,13 @@ static void himax_cal_gap_data_vertical(int start, int end_idx, int direct,
 			if (i < start+rx_num)
 				result_raw[i] = 0;
 			else
-				result_raw[i] = org_raw[i-rx_num] - org_raw[i];
+				result_raw[i] = ABS(((int)org_raw[i-rx_num] - (int)org_raw[i]) * 100 / (int)org_raw[i]);
 
 		} else { /* down - up */
 			if (i > (start + rx_num*(end_idx-1)-1))
 				result_raw[i] = 0;
 			else
-				result_raw[i] = org_raw[i+rx_num] - org_raw[i];
+				result_raw[i] = ABS(((int)org_raw[i+rx_num] - (int)org_raw[i]) * 100 / (int)org_raw[i]);
 
 		}
 	}
@@ -999,8 +996,6 @@ static int himax_gap_test_horizontal_setting(void)
 		return MEM_ALLOC_FAIL;
 	}
 	g_gap_horizontal_part[0] = 0;
-	g_gap_horizontal_part[1] = 8;
-	g_gap_horizontal_part[2] = 24;
 
 	return NO_ERR;
 }
@@ -1024,14 +1019,14 @@ static void himax_cal_gap_data_horizontal(int start, int end_idx, int direct,
 					result_raw[i] = 0;
 				else
 					result_raw[i] =
-						org_raw[i-1] - org_raw[i];
+						ABS(((int)org_raw[i-1] - (int)org_raw[i]) * 100 / (int)org_raw[i]);
 
 			} else { /* right - left */
 				if (i == ((start + (j*rx_num) + end_idx) - 1))
 					result_raw[i] = 0;
 				else
 					result_raw[i] =
-						org_raw[i + 1] - org_raw[i];
+						ABS(((int)org_raw[i+1] - (int)org_raw[i]) * 100 / (int)org_raw[i]);
 			}
 		}
 	}
@@ -1277,7 +1272,7 @@ static uint32_t himax_data_campare(uint8_t checktype, uint32_t *RAW, int ret_val
 
 		/*Check negative side noise*/
 		for (i = 0; i < block_num; i++) {
-			if ((int)RAW[i] >	(g_inspection_criteria[idx_max][i] * g_recal_thx / 100) ||
+			if ((int)RAW[i] >	(g_inspection_criteria[idx_max][i] * NOISEMAX / 100) ||
 			(int)RAW[i] < (g_inspection_criteria[idx_min][i] * g_recal_thx / 100)) {
 				E(FAIL_IN_INDEX, __func__, g_himax_inspection_mode[checktype], i);
 				ret_val |= 1 << (checktype + ERR_SFT);
@@ -1344,10 +1339,12 @@ static int himax_get_max_dc(void)
 /*	 HX_GAP END*/
 static uint32_t mpTestFunc(uint8_t checktype, uint32_t datalen)
 {
-	uint32_t len;
+	uint32_t len = 0;
 	uint32_t RAW[datalen];
 	int n_frame = 0;
 	uint32_t ret_val = HX_INSPECT_OK;
+
+	memset(RAW, 0, datalen*sizeof(RAW[0]));
 
 	/*uint16_t* pInspectGridData = &gInspectGridData[0];*/
 	/*uint16_t* pInspectNoiseData = &gInspectNoiseData[0];*/
@@ -1475,10 +1472,10 @@ static int hiamx_parse_str2int(char *str)
 	int i = 0;
 	int temp_cal = 0;
 	int result = 0;
-	int str_len = strlen(str);
+	unsigned int str_len = strlen(str);
 	int negtive_flag = 0;
 
-	for (i = 0; i < strlen(str); i++) {
+	for (i = 0; i < str_len; i++) {
 		if (str[i] != '-' && str[i] > '9' && str[i] < '0') {
 			E("%s: Parsing fail!\n", __func__);
 			result = -9487;
@@ -1774,7 +1771,7 @@ static int himax_test_item_parse(char *str_data, int str_size)
 
 	do {
 		str_ptr = strnstr(str_ptr, "HIMAX", size);
-		end_ptr = strnstr(str_ptr, "\x0d\x0a", size);
+		end_ptr = strnstr(str_ptr, "\r\n", size);
 		if (str_ptr != NULL && end_ptr != NULL) {
 			while (g_himax_inspection_mode[i]) {
 				if (strncmp(str_ptr, g_himax_inspection_mode[i], end_ptr - str_ptr) == 0) {
@@ -2261,7 +2258,7 @@ static void himax_osr_ctrl(bool enable)
 	uint8_t back_byte = 0;
 	uint8_t retry = 10;
 
-	input_info(true, &private_ts->client->dev, "%s %s: Entering\n", HIMAX_LOG_TAG, __func__);
+	I("%s %s: Entering\n", HIMAX_LOG_TAG, __func__);
 
 	tmp_addr[3] = 0x10; tmp_addr[2] = 0x00; tmp_addr[1] = 0x70; tmp_addr[0] = 0x88;
 
@@ -2282,11 +2279,11 @@ static void himax_osr_ctrl(bool enable)
 		g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
 		back_byte = tmp_data[0];
 		if (w_byte != back_byte)
-			input_info(true, &private_ts->client->dev, "%s %s: Write osr_ctrl failed, w_byte = %02X, back_byte = %02X\n",
-				HIMAX_LOG_TAG, __func__, w_byte, back_byte);
+			I("%s %s: Write osr_ctrl failed, w_byte = %02X, back_byte = %02X\n",
+			HIMAX_LOG_TAG, __func__, w_byte, back_byte);
 		else {
-			input_info(true, &private_ts->client->dev, "%s %s: Write osr_ctrl correctly, w_byte = %02X, back_byte = %02X\n",
-				HIMAX_LOG_TAG, __func__, w_byte, back_byte);
+			I("%s %s: Write osr_ctrl correctly, w_byte = %02X, back_byte = %02X\n",
+			HIMAX_LOG_TAG, __func__, w_byte, back_byte);
 			break;
 		}
 	} while (--retry > 0);
@@ -2300,7 +2297,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 	g_zero_event_count = 0;
 #endif
 
-	input_info(true, &private_ts->client->dev, "%s Need Change Mode ,target=%s\n",
+	I("%s Need Change Mode ,target=%s\n",
 		HIMAX_LOG_TAG, g_himax_inspection_mode[checktype]);
 	g_core_fp.fp_sense_off(true);
 	hx_turn_on_mp_func(1);
@@ -2312,7 +2309,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 	g_core_fp.fp_idle_mode(1);
 
 	himax_switch_mode_inspection(checktype);
-	if (checktype == HIMAX_ABS_NOISE) {
+	if (checktype == HIMAX_ABS_NOISE || checktype == HIMAX_WEIGHT_NOISE) {
 		himax_osr_ctrl(0); /*disable OSR_HOP_EN*/
 		himax_set_N_frame(NOISEFRAME, checktype);
 		/* himax_get_noise_base(); */
@@ -2320,7 +2317,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 			|| checktype == HIMAX_ACT_IDLE_NOISE) {
 		I("N frame = %d\n", 10);
 		himax_set_N_frame(10, checktype);
-	} else if (checktype >= HIMAX_LPWUG_RAWDATA) {
+	} else if (checktype == HIMAX_RAWDATA || checktype >= HIMAX_LPWUG_RAWDATA) {
 		I("N frame = %d\n", 1);
 		himax_set_N_frame(1, checktype);
 	} else {
@@ -2329,7 +2326,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 	g_core_fp.fp_sense_on(1);
 	ret = himax_wait_sorting_mode(checktype);
 	if (ret) {
-		input_err(true, &private_ts->client->dev, "%s %s: himax_wait_sorting_mode FAIL\n",
+		E("%s %s: himax_wait_sorting_mode FAIL\n",
 			HIMAX_LOG_TAG, __func__);
 		goto END_FUNC;
 	}
@@ -2339,7 +2336,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 
 	ret = himax_get_rawdata(RAW, datalen, checktype);
 	if (ret) {
-		input_err(true, &private_ts->client->dev, "%s %s: himax_get_rawdata FAIL\n",
+		E("%s %s: himax_get_rawdata FAIL\n",
 			HIMAX_LOG_TAG, __func__);
 		goto END_FUNC;
 	}
@@ -2348,7 +2345,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 	g_dc_max = himax_get_max_dc();
 
 END_FUNC:
-	input_info(true, &private_ts->client->dev, "%s %s:return normal status!\n",
+	I("%s %s:return normal status!\n",
 		HIMAX_LOG_TAG, __func__);
 	g_core_fp.fp_sense_off(true);
 
@@ -2356,9 +2353,6 @@ END_FUNC:
 	himax_switch_mode_inspection(HIMAX_RAWDATA);
 	hx_turn_on_mp_func(0);
 	/* change to auto status */
-	g_core_fp.fp_idle_mode(0);
-	if (checktype == HIMAX_ABS_NOISE)
-		himax_osr_ctrl(1); /*enable OSR_HOP_EN*/
 	himax_set_N_frame(1, HIMAX_ABS_NOISE);
 #ifndef HX_ZERO_FLASH
 	if (g_core_fp.fp_reload_disable != NULL)
@@ -2397,11 +2391,9 @@ int hx_get_3x3_noise(int *RAW, int mid_pos_x, int mid_pos_y)
 		for (x = 0; x < 3; x++) {
 			now_idx = start_idx + (x * 1) + (y * ic_data->HX_RX_NUM);
 			sum += RAW[now_idx];
-			I("idx_%02d:%03d", now_idx, RAW[now_idx]);
 		}
 		printk("\n");
 	}
-	I("Now SUM=%d\n", sum);
 	ret = sum;
 	return ret;
 }
@@ -2417,20 +2409,28 @@ int hx_sensity_test(int *result)
 	int datalen = 0;
 	int tx_num = ic_data->HX_TX_NUM;
 	int rx_num = ic_data->HX_RX_NUM;
-	int sens_pt_grp[5][2];
+	int sens_pt_grp[9][2];
 
-	I("%s:Entering!\n", __func__);
 	/* 1: y, 0:x*/
-	sens_pt_grp[0][1] = tx_num / 4;
-	sens_pt_grp[0][0] = rx_num - 1 - rx_num / 4;	//rx_num / 4;
-	sens_pt_grp[1][1] = tx_num - 1 - tx_num / 4;
-	sens_pt_grp[1][0] = rx_num - 1 - rx_num / 4;	//rx_num / 4;
-	sens_pt_grp[2][1] = tx_num / 2;
-	sens_pt_grp[2][0] = rx_num / 2;
-	sens_pt_grp[3][1] = tx_num / 4;
-	sens_pt_grp[3][0] = rx_num / 4;	//rx_num-1 - rx_num / 4;
-	sens_pt_grp[4][1] = tx_num - 1 - tx_num / 4;
-	sens_pt_grp[4][0] = rx_num / 4;	//rx_num-1 - rx_num / 4;
+	sens_pt_grp[0][1] = 3;
+	sens_pt_grp[0][0] = 3;
+	sens_pt_grp[1][1] = tx_num / 2;
+	sens_pt_grp[1][0] = 3;
+	sens_pt_grp[2][1] = tx_num - 4;
+	sens_pt_grp[2][0] = 3;
+	sens_pt_grp[3][1] = 3;
+	sens_pt_grp[3][0] = rx_num / 2;
+	sens_pt_grp[4][1] = tx_num / 2;
+	sens_pt_grp[4][0] = rx_num / 2;
+	sens_pt_grp[5][1] = tx_num - 4;
+	sens_pt_grp[5][0] = rx_num / 2;
+	sens_pt_grp[6][1] = 3;
+	sens_pt_grp[6][0] = rx_num - 4;
+	sens_pt_grp[7][1] = tx_num / 2;
+	sens_pt_grp[7][0] = rx_num - 4;
+	sens_pt_grp[8][1] = tx_num - 4;
+	sens_pt_grp[8][0] = rx_num - 4;
+
 	datalen = (ic_data->HX_TX_NUM * ic_data->HX_RX_NUM)
 			+ ic_data->HX_TX_NUM + ic_data->HX_RX_NUM;
 	RAW = kzalloc(sizeof(int) * datalen, GFP_KERNEL);
@@ -2457,14 +2457,11 @@ int hx_sensity_test(int *result)
 			printk("\n");
 		}
 	}
-	for (i = 0; i < 5; i++) {
-		I("now:%d,x=%d,y=%d\n", i, sens_pt_grp[i][0],
-			sens_pt_grp[i][1]);
+	for (i = 0; i < 9; i++) {
 		result[i] =
 			hx_get_3x3_noise(RAW, sens_pt_grp[i][0], sens_pt_grp[i][1]);
 	}
 	kfree(RAW);
-	I("%s:End!\n", __func__);
 	return ret;
 }
 
@@ -2494,16 +2491,16 @@ extern unsigned long CFG_VER_MAJ_FLASH_ADDR;
 extern unsigned long CFG_VER_MIN_FLASH_ADDR;
 extern unsigned long CID_VER_MAJ_FLASH_ADDR;
 extern unsigned long CID_VER_MIN_FLASH_ADDR;
-//extern unsigned long PANEL_VERSION_ADDR;
-unsigned long PANEL_VERSION_ADDR = 49156; /* 0x00C004 */
+extern unsigned long PANEL_VERSION_ADDR;
+//unsigned long PANEL_VERSION_ADDR = 49156; /* 0x00C004 */
 extern bool fw_update_complete;
 
 static void not_support_cmd(void *dev_data)
 {
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 	snprintf(buf, sizeof(buf), "%s", "NA");
@@ -2512,7 +2509,7 @@ static void not_support_cmd(void *dev_data)
 	sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
 	sec_cmd_set_cmd_exit(sec);
 
-	input_info(true, &data->client->dev, "%s %s: \"%s(%d)\"\n",
+	I("%s %s: \"%s(%d)\"\n",
 			HIMAX_LOG_TAG, __func__, buf, (int)strnlen(buf,
 								sizeof(buf)));
 	return;
@@ -2524,8 +2521,8 @@ static void check_connection(void *dev_data)
 	uint8_t tmp_data[DATA_LEN_4] = { 0 };
 	int ret_val = NO_ERR;
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 	ret_val =
@@ -2544,7 +2541,7 @@ static void check_connection(void *dev_data)
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2552,8 +2549,8 @@ static void get_chip_vendor(void *dev_data)
 {
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 	snprintf(buf, sizeof(buf), "%s", "HIMAX");
@@ -2563,7 +2560,7 @@ static void get_chip_vendor(void *dev_data)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "IC_VENDOR");
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2571,8 +2568,8 @@ static void get_chip_name(void *dev_data)
 {
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -2583,7 +2580,7 @@ static void get_chip_name(void *dev_data)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "IC_NAME");
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2591,8 +2588,8 @@ static void get_chip_id(void *dev_data)
 {
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -2601,7 +2598,7 @@ static void get_chip_id(void *dev_data)
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2620,8 +2617,17 @@ static void fw_update(void *dev_data)
 		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
+#if defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	if (sec->cmd_param[0] == 1) {
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+		snprintf(buf, sizeof(buf), "%s", "OK");
+		sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+		I("%s: user_ship, success\n", __func__);
+		return;
+	}
+#endif
 
-	input_info(true, &private_ts->client->dev, "%s %s(), %d\n", HIMAX_LOG_TAG,
+	I("%s %s(), %d\n", HIMAX_LOG_TAG,
 			__func__, sec->cmd_param[0]);
 
 	switch (sec->cmd_param[0]) {
@@ -2636,8 +2642,7 @@ static void fw_update(void *dev_data)
 			private_ts->pdata->i_CTPM_firmware_name);
 		ret = request_firmware(&firmware, fw_path, private_ts->dev);
 		if (ret) {
-			input_err(true, &private_ts->client->dev,
-					"%s %s: do not request firmware: %d name as=%s\n",
+			E("%s %s: do not request firmware: %d name as=%s\n",
 					HIMAX_LOG_TAG, __func__, ret, fw_path);
 			sec->cmd_state = SEC_CMD_STATUS_FAIL;
 			goto FAIL_END;
@@ -2664,8 +2669,7 @@ static void fw_update(void *dev_data)
 					(unsigned char *) firmware->data, firmware->size, false);
 			break;
 		default:
-			input_err(true, &private_ts->client->dev,
-					"%s %s: does not support fw size %d\n",
+			E("%s %s: does not support fw size %d\n",
 					HIMAX_LOG_TAG, __func__, (int)firmware->size);
 		}
 
@@ -2680,8 +2684,7 @@ static void fw_update(void *dev_data)
 
 		filp = filp_open(HIMAX_UMS_FW_PATH, O_RDONLY, S_IRUSR);
 		if (IS_ERR(filp)) {
-			input_err(true, &private_ts->client->dev,
-					"%s %s: open firmware file failed\n",
+			E("%s %s: open firmware file failed\n",
 					HIMAX_LOG_TAG, __func__);
 			sec->cmd_state = SEC_CMD_STATUS_FAIL;
 			break;
@@ -2699,8 +2702,7 @@ static void fw_update(void *dev_data)
 					sizeof(unsigned char) * fsize,
 					&filp->f_pos);
 		if (ret < 0) {
-			input_err(true, &private_ts->client->dev,
-					"%s %s: read firmware file failed\n",
+			E("%s %s: read firmware file failed\n",
 					HIMAX_LOG_TAG, __func__);
 			sec->cmd_state = SEC_CMD_STATUS_FAIL;
 			break;
@@ -2730,8 +2732,7 @@ static void fw_update(void *dev_data)
 						upgrade_fw, fsize, false);
 			break;
 		default:
-			input_err(true, &private_ts->client->dev,
-					"%s %s: does not support fw size %d\n",
+			E("%s %s: does not support fw size %d\n",
 					HIMAX_LOG_TAG, __func__, (int)fsize);
 		}
 
@@ -2739,8 +2740,7 @@ static void fw_update(void *dev_data)
 			sec->cmd_state = SEC_CMD_STATUS_FAIL;
 		break;
 	default:
-		input_err(true, &private_ts->client->dev,
-				"%s %s(), Invalid fw file type!\n", HIMAX_LOG_TAG,
+		E("%s %s(), Invalid fw file type!\n", HIMAX_LOG_TAG,
 				__func__);
 		goto FAIL_END;
 	}
@@ -2763,7 +2763,7 @@ FAIL_END:
 		snprintf(buf, sizeof(buf), "%s", "NG");
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 	himax_int_enable(1);
-	input_info(true, &private_ts->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2780,20 +2780,19 @@ static void get_fw_ver_bin(void *dev_data)
 	char fw_path[MAX_FW_PATH + 1];
 	const struct firmware *firmware = NULL;
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	snprintf(fw_path, MAX_FW_PATH, "%s",
 		private_ts->pdata->i_CTPM_firmware_name);
-	input_info(true, &data->client->dev, "%s fw_path=%s\n", HIMAX_LOG_TAG,
+	I("%s fw_path=%s\n", HIMAX_LOG_TAG,
 			fw_path);
 
 	ret = request_firmware(&firmware, fw_path, private_ts->dev);
 	if (ret) {
-		input_err(true, &data->client->dev,
-				"%s %s: do not request firmware: %d name as=%s\n",
+		E("%s %s: do not request firmware: %d name as=%s\n",
 				HIMAX_LOG_TAG, __func__, ret, fw_path);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
 		snprintf(buf, sizeof(buf),
@@ -2813,8 +2812,10 @@ static void get_fw_ver_bin(void *dev_data)
 		} else {
 			if (strcmp(HX_83112A_SERIES_PWON, private_ts->chip_name) == 0)
 				bin_ver_ic_name = 0x01;
-			else if(strcmp(HX_83102D_SERIES_PWON,private_ts->chip_name) == 0)
+			else if (strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0)
 				bin_ver_ic_name = 0x02;
+			else if (strcmp(HX_83102E_SERIES_PWON, private_ts->chip_name) == 0)
+				bin_ver_ic_name = 0x03;
 			else
 				bin_ver_ic_name = 0x00;
 			bin_ver_proj = firmware->data[CID_VER_MAJ_FLASH_ADDR];
@@ -2832,15 +2833,15 @@ static void get_fw_ver_bin(void *dev_data)
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "FW_VER_BIN");
 	sec->cmd_state = SEC_CMD_STATUS_OK;
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
 static void get_config_ver(void *dev_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	char buf[LEN_RSLT] = { 0 };
 
@@ -2853,7 +2854,7 @@ static void get_config_ver(void *dev_data)
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2863,12 +2864,13 @@ static void get_checksum_data(void *dev_data)
 	u32 chksum = 0;
 	u32 chksum_size = 0;
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
-	if (strcmp(HX_83102D_SERIES_PWON,private_ts->chip_name) == 0) {
+	if ((strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0) ||
+		(strcmp(HX_83102E_SERIES_PWON, private_ts->chip_name) == 0)) {
 		chksum_size = FW_SIZE_128k;
 	} else {
 		chksum_size = FW_SIZE_64k;
@@ -2902,7 +2904,7 @@ static void get_checksum_data(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2914,9 +2916,11 @@ static void get_fw_ver_ic(void *dev_data)
 	uint8_t ic_ver_fw = 0; /* CID Min*/
 
 	char buf[LEN_RSLT] = { 0 };
+	char model[16] = {0};
+
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -2932,8 +2936,10 @@ static void get_fw_ver_ic(void *dev_data)
 	} else {
 		if (strcmp(HX_83112A_SERIES_PWON, private_ts->chip_name) == 0)
 			ic_ver_ic_name = 0x01;
-		else if(strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0)
+		else if (strcmp(HX_83102D_SERIES_PWON, private_ts->chip_name) == 0)
 			ic_ver_ic_name = 0x02;
+		else if (strcmp(HX_83102E_SERIES_PWON, private_ts->chip_name) == 0)
+			ic_ver_ic_name = 0x03;
 		else
 			ic_ver_ic_name = 0x00;
 		ic_ver_proj = ic_data->vendor_cid_maj_ver;
@@ -2941,14 +2947,18 @@ static void get_fw_ver_ic(void *dev_data)
 		ic_ver_fw = ic_data->vendor_cid_min_ver;
 
 		snprintf(buf, sizeof(buf), "HX%02X%02X%02X%02X", ic_ver_ic_name, ic_ver_proj, ic_ver_modul, ic_ver_fw);
+		snprintf(model, sizeof(model), "HX%02X%02X", ic_ver_ic_name, ic_ver_proj);
+
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
+	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING) {
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "FW_VER_IC");
+		sec_cmd_set_cmd_result_all(sec, model, strnlen(model, sizeof(model)), "FW_MODEL");
+	}
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -2957,12 +2967,12 @@ static void set_edge_mode(void *dev_data)
 	int ret = 0;
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
-	input_info(true, &data->client->dev, "%s %s(), %d\n", HIMAX_LOG_TAG,
+	I("%s %s(), %d\n", HIMAX_LOG_TAG,
 			__func__, sec->cmd_param[0]);
 
 	switch (sec->cmd_param[0]) {
@@ -2970,23 +2980,18 @@ static void set_edge_mode(void *dev_data)
 		ret = g_core_fp.set_edge_border(FW_EDGE_BORDER_OFF);
 		if (ret == 0) {
 			g_f_edge_border = FW_EDGE_BORDER_OFF;
-			input_info(true, &data->client->dev,
-					"%s %s(), Unset Edge Mode\n", HIMAX_LOG_TAG,
-					__func__);
+			I("%s %s(), Unset Edge Mode\n", HIMAX_LOG_TAG, __func__);
 		}
 		break;
 	case 1:
 		ret = g_core_fp.set_edge_border(FW_EDGE_BORDER_ON);
 		if (ret == 0) {
 			g_f_edge_border = FW_EDGE_BORDER_ON;
-			input_info(true, &data->client->dev,
-					"%s %s(), Set Edge Mode\n", HIMAX_LOG_TAG,
-					__func__);
+			I("%s %s(), Set Edge Mode\n", HIMAX_LOG_TAG, __func__);
 		}
 		break;
 	default:
-		input_err(true, &data->client->dev,
-				"%s %s(), Invalid Argument\n", HIMAX_LOG_TAG,
+		E("%s %s(), Invalid Argument\n", HIMAX_LOG_TAG,
 				__func__);
 		break;
 	}
@@ -3000,7 +3005,7 @@ static void set_edge_mode(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3034,12 +3039,12 @@ static void set_grip_data(void *dev_data)
 			write_data[3] = 0x11; write_data[2] = sec->cmd_param[4];
 			write_data[1] = sec->cmd_param[5];
 		} else {
-			input_err(true, &private_ts->client->dev, "%s %s: cmd1 is abnormal, %d\n",
+			E("%s %s: cmd1 is abnormal, %d\n",
 					HIMAX_LOG_TAG, __func__, sec->cmd_param[1]);
 			goto err_grip_data;
 		}
 	} else {
-		input_err(true, &private_ts->client->dev, "%s %s: cmd0 is abnormal, %d\n",
+		E("%s %s: cmd0 is abnormal, %d\n",
 			HIMAX_LOG_TAG, __func__, sec->cmd_param[0]);
 		goto err_grip_data;
 	}
@@ -3054,7 +3059,7 @@ static void set_grip_data(void *dev_data)
 			ret = 1;
 		} else {
 			retry--;
-			input_err(true, &private_ts->client->dev, "%s %s: write register retry(%d)\n",
+			E("%s %s: write register retry(%d)\n",
 					HIMAX_LOG_TAG, __func__, retry);
 		}
 	} while (retry > 0 && ret == 0);
@@ -3071,7 +3076,7 @@ err_grip_data:
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 	sec_cmd_set_cmd_exit(sec);
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3080,8 +3085,8 @@ static void get_threshold(void *dev_data)
 	char buf[LEN_RSLT] = { 0 };
 	int threshold = 0;
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -3096,7 +3101,7 @@ static void get_threshold(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3105,8 +3110,8 @@ static void get_scr_x_num(void *dev_data)
 	int val = -1;
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -3120,7 +3125,7 @@ static void get_scr_x_num(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3129,8 +3134,8 @@ static void get_scr_y_num(void *dev_data)
 	int val = -1;
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -3144,7 +3149,7 @@ static void get_scr_y_num(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3153,8 +3158,8 @@ static void get_all_x_num(void *dev_data)
 	int val = -1;
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -3168,7 +3173,7 @@ static void get_all_x_num(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3177,8 +3182,8 @@ static void get_all_y_num(void *dev_data)
 	int val = -1;
 	char buf[LEN_RSLT] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
@@ -3192,7 +3197,7 @@ static void get_all_y_num(void *dev_data)
 	}
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 }
 
@@ -3275,8 +3280,8 @@ static void get_rawcap(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_RAWDATA, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev, "%s %s: get rawdata fail!\n", HIMAX_LOG_TAG, __func__);
+	if (val > 0) {
+		E("%s %s: get rawdata fail!\n", HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s:get fail", __func__);
 		goto END_OUPUT;
 	}
@@ -3327,15 +3332,15 @@ static void get_rawcap(void *dev_data)
 	hx_write_4k_flash_flow(HX_ADR_RAW_FLASH, flash_data, flash_size);
 #endif
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_rawdata = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_rawdata = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -3347,7 +3352,7 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "RAWCAP");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 #ifdef HX_SAVE_RAW_TO_FLASH
@@ -3356,28 +3361,26 @@ END_OUPUT:
 	himax_int_enable(1);
 }
 
-static void get_rawcap_all(void *dev_data)
+static void run_get_rawcap_all(void *dev_data)
 {
 	char temp[SEC_CMD_STR_LEN] = { 0 };
 	char *buf = NULL;
 	int i = 0;
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	if (g_sec_raw_buff->f_ready_rawdata != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(ic_data->HX_TX_NUM * ic_data->HX_RX_NUM * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -3430,8 +3433,8 @@ static void get_open(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_OPEN, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev, "%s %s: get open fail!\n",
+	if (val > 0) {
+		E("%s %s: get open fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s:get fail\n", __func__);
 		goto END_OUPUT;
@@ -3447,15 +3450,15 @@ static void get_open(void *dev_data)
 	hx_print_frame(data, g_sec_raw_buff->_open);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_open = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_open = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -3464,8 +3467,10 @@ END_OUPUT:
 	I("Min=%d, Max=%d\n", limit_val[1], limit_val[0]);
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
+		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "OPEN");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 	himax_int_enable(1);
@@ -3478,21 +3483,19 @@ static void get_open_all(void *dev_data)
 	int i = 0;
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	if (g_sec_raw_buff->f_ready_open != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(ic_data->HX_TX_NUM * ic_data->HX_RX_NUM * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -3545,8 +3548,8 @@ static void get_short(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_SHORT, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev, "%s %s: get short fail!\n",
+	if (val > 0) {
+		E("%s %s: get short fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s:get fail\n", __func__);
 		goto END_OUPUT;
@@ -3562,15 +3565,15 @@ static void get_short(void *dev_data)
 	hx_print_frame(data, g_sec_raw_buff->_short);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_short = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_short = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -3582,7 +3585,7 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "SHORT");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 	himax_int_enable(1);
@@ -3595,21 +3598,19 @@ static void get_short_all(void *dev_data)
 	int i = 0;
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	if (g_sec_raw_buff->f_ready_short != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(ic_data->HX_TX_NUM * ic_data->HX_RX_NUM * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -3662,9 +3663,8 @@ static void get_mic_open(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_MICRO_OPEN, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev,
-				"%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
+	if (val > 0) {
+		E("%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
 				__func__);
 		snprintf(buf, sizeof(buf), "%s:get fail\n", __func__);
 		goto END_OUPUT;
@@ -3680,15 +3680,15 @@ static void get_mic_open(void *dev_data)
 	hx_print_frame(data, g_sec_raw_buff->_mopen);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_mopen = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_mopen = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -3700,7 +3700,7 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "MICRO_OPEN");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 	himax_int_enable(1);
@@ -3713,21 +3713,19 @@ static void get_mic_open_all(void *dev_data)
 	int i = 0;
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	if (g_sec_raw_buff->f_ready_mopen != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(ic_data->HX_TX_NUM * ic_data->HX_RX_NUM * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -3765,6 +3763,13 @@ static void get_noise(void *dev_data)
 	struct himax_ts_data *data =
 		container_of(sec, struct himax_ts_data, sec);
 
+	int i = 0;
+	uint16_t noise_count = 0;
+	uint16_t palm_num = 0;
+	uint16_t weight = 0;
+	uint8_t tmp_addr[4];
+	uint8_t tmp_data[4];
+
 	sec_cmd_set_default_result(sec);
 
 	datalen = (ic_data->HX_TX_NUM * ic_data->HX_RX_NUM)
@@ -3780,10 +3785,8 @@ static void get_noise(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_ABS_NOISE, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev,
-				"%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
-				__func__);
+	if (val > 0) {
+		E("%s %s: get rawdata fail!\n", HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s:get fail\n", __func__);
 		goto END_OUPUT;
 	}
@@ -3792,20 +3795,42 @@ static void get_noise(void *dev_data)
 	limit_val[1] = 9999;	/* min */
 	hx_findout_limit(RAW, limit_val, sz_mutual);
 
+	/* noise weight test */
+	himax_get_noise_base(HIMAX_WEIGHT_NOISE);
+	palm_num = himax_get_palm_num();
+	for (i = 0; i < sz_mutual; i++) {
+		if ((int)RAW[i] > NOISEMAX)
+			noise_count++;
+	}
+	I("noise_count = %d\n", noise_count);
+	if (noise_count > palm_num) {
+		val = -1;
+		E("%s: noise test NG, PALM\n", __func__);
+	}
+	himax_in_parse_assign_cmd(addr_weight_sup, tmp_addr, sizeof(tmp_addr));
+
+	g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
+	if (tmp_data[3] == tmp_addr[1] && tmp_data[2] == tmp_addr[0])
+		weight = (tmp_data[1] << 8) | tmp_data[0];
+	else
+		I("%s: FW does not support weight test\n", __func__);
+
+	I("%s: weight = %d, %02X, %02X ", __func__, weight, tmp_data[2], tmp_data[3]);
+	/*********************************/
 
 	memcpy(&g_sec_raw_buff->_noise[0], &RAW[0], sizeof(int32_t) * ic_data->HX_TX_NUM * ic_data->HX_RX_NUM);
 	hx_print_frame(data, g_sec_raw_buff->_noise);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_noise = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_noise = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -3814,10 +3839,13 @@ END_OUPUT:
 	I("Min=%d, Max=%d\n", limit_val[1], limit_val[0]);
 
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
-	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
+	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING) {
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "NOISE");
+		snprintf(buf, sizeof(buf), "%d,%d", 0, weight);
+		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "NoiseWeight");
+	}
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 	himax_int_enable(1);
@@ -3830,21 +3858,19 @@ static void get_noise_all(void *dev_data)
 	int i = 0;
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	if (g_sec_raw_buff->f_ready_noise != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(ic_data->HX_TX_NUM * ic_data->HX_RX_NUM * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -3897,9 +3923,8 @@ static void get_lp_rawcap(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_LPWUG_RAWDATA, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev,
-				"%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
+	if (val > 0) {
+		E("%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
 				__func__);
 		snprintf(buf, sizeof(buf), "%s:get fail\n", __func__);
 		goto END_OUPUT;
@@ -3915,15 +3940,15 @@ static void get_lp_rawcap(void *dev_data)
 	hx_print_frame(data, g_sec_raw_buff->_lp_rawdata);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_lp_rawdata = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_lp_rawdata = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -3935,7 +3960,7 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "LP_RAW");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 	himax_int_enable(1);
@@ -3968,9 +3993,8 @@ static void get_lp_noise(void *dev_data)
 	himax_int_enable(0);
 	val = hx_get_one_raw(RAW, HIMAX_LPWUG_ABS_NOISE, datalen);
 
-	if (val < 0) {
-		input_err(true, &data->client->dev,
-				"%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
+	if (val > 0) {
+		E("%s %s: get rawdata fail!\n", HIMAX_LOG_TAG,
 				__func__);
 		snprintf(buf, sizeof(buf), "%s:get fail\n", __func__);
 		goto END_OUPUT;
@@ -3986,15 +4010,15 @@ static void get_lp_noise(void *dev_data)
 	hx_print_frame(data, g_sec_raw_buff->_lp_noise);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_lp_noise = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_lp_noise = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -4006,13 +4030,13 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "LP_NOISE");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	kfree(RAW);
 	himax_int_enable(1);
 }
 
-static int hx_gap_hor_raw(int test_type, uint32_t * raw, int *result_raw)
+static int hx_gap_hor_raw(int test_type, uint32_t *raw, int *result_raw)
 {
 	int rx_num = ic_data->HX_RX_NUM;
 	int tx_num = ic_data->HX_TX_NUM;
@@ -4106,15 +4130,14 @@ static void get_gap_data_y(void *dev_data)
 	int limit_val[2] = { 0 };	/* 0: max, 1: min */
 	int sz_mutual = ic_data->HX_TX_NUM * (ic_data->HX_RX_NUM - g_gap_horizontal_partial);
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	himax_int_enable(0);
 	if (g_sec_raw_buff->f_ready_rawdata != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s %s: need get rawcap firstly\n", HIMAX_LOG_TAG, __func__);
+		E("%s %s: need get rawcap firstly\n", HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s:need get rawcap firstly", __func__);
 		val = HX_RAW_NOT_READY;
 		goto END_OUPUT;
@@ -4123,7 +4146,7 @@ static void get_gap_data_y(void *dev_data)
 	val = hx_gap_hor_raw(HIMAX_GAPTEST_RAW, g_sec_raw_buff->_rawdata,
 				g_sec_raw_buff->_gap_hor);
 	if (val < 0) {
-		input_err(true, &private_ts->client->dev, "%s %s: failed to get gap Y\n",
+		E("%s %s: failed to get gap Y\n",
 			HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "failed to get gap Y");
 		goto END_OUPUT;
@@ -4134,15 +4157,15 @@ static void get_gap_data_y(void *dev_data)
 	hx_findout_limit(g_sec_raw_buff->_gap_hor, limit_val, sz_mutual);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_gap_hor = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_gap_hor = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -4154,7 +4177,7 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "RAW_GAP_Y");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	himax_int_enable(1);
 }
@@ -4167,21 +4190,19 @@ static void get_gap_y_all(void *dev_data)
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	int sz_mutual = ic_data->HX_TX_NUM * (ic_data->HX_RX_NUM - g_gap_horizontal_partial);
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
-	if (g_sec_raw_buff->f_ready_gap_hor!= HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+	if (g_sec_raw_buff->f_ready_gap_hor != HX_RAWDATA_READY) {
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(sz_mutual * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -4207,7 +4228,7 @@ END_OUPUT:
 	sec_cmd_set_cmd_result(sec, temp, strnlen(temp, SEC_CMD_STR_LEN));
 }
 
-static int hx_gap_ver_raw(int test_type, uint32_t * org_raw, int *result_raw)
+static int hx_gap_ver_raw(int test_type, uint32_t *org_raw, int *result_raw)
 {
 	int i_partial = 0;
 	int tmp_start = 0;
@@ -4304,15 +4325,14 @@ static void get_gap_data_x(void *dev_data)
 	int limit_val[2] = { 0 };	/* 0: max, 1: min */
 	int sz_mutual = (ic_data->HX_TX_NUM - g_gap_vertical_partial) * ic_data->HX_RX_NUM;
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
 	himax_int_enable(0);
 	if (g_sec_raw_buff->f_ready_rawdata != HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s %s: need get rawcap firstly\n", HIMAX_LOG_TAG, __func__);
+		E("%s %s: need get rawcap firstly\n", HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s:need get rawcap firstly", __func__);
 		val = HX_RAW_NOT_READY;
 		goto END_OUPUT;
@@ -4321,7 +4341,7 @@ static void get_gap_data_x(void *dev_data)
 	val = hx_gap_ver_raw(HIMAX_GAPTEST_RAW, g_sec_raw_buff->_rawdata,
 				g_sec_raw_buff->_gap_ver);
 	if (val < 0) {
-		input_err(true, &private_ts->client->dev, "%s %s: failed to get gap X\n",
+		E("%s %s: failed to get gap X\n",
 			HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "failed to get gap X");
 		goto END_OUPUT;
@@ -4332,15 +4352,15 @@ static void get_gap_data_x(void *dev_data)
 	hx_findout_limit(g_sec_raw_buff->_gap_ver, limit_val, sz_mutual);
 
 END_OUPUT:
-	if (val >= 0) {
+	if (val == 0) {
 		g_sec_raw_buff->f_ready_gap_ver = HX_RAWDATA_READY;
-		input_info(true, &data->client->dev, "%s %s: ret val is ok!\n",
+		I("%s %s: ret val is ok!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%d,%d", limit_val[1], limit_val[0]);	/*min,max */
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	} else {
 		g_sec_raw_buff->f_ready_gap_ver = HX_RAWDATA_NOT_READY;
-		input_err(true, &data->client->dev, "%s %s: ret val is fail!\n",
+		E("%s %s: ret val is fail!\n",
 				HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s,error_code=%d", "NG", val);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -4352,7 +4372,7 @@ END_OUPUT:
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buf, strnlen(buf, sizeof(buf)), "RAW_GAP_X");
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
 	himax_int_enable(1);
 }
@@ -4365,21 +4385,19 @@ static void get_gap_x_all(void *dev_data)
 	char msg[SEC_CMD_STR_LEN] = { 0 };
 	int sz_mutual = (ic_data->HX_TX_NUM - g_gap_vertical_partial) * ic_data->HX_RX_NUM;
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+	/*struct himax_ts_data *data =
+		container_of(sec, struct himax_ts_data, sec);*/
 
 	sec_cmd_set_default_result(sec);
 
-	if (g_sec_raw_buff->f_ready_gap_ver!= HX_RAWDATA_READY) {
-		input_err(true, &data->client->dev,
-				"%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
+	if (g_sec_raw_buff->f_ready_gap_ver != HX_RAWDATA_READY) {
+		E("%s Need to get rawdata first!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
 	buf = kzalloc(sz_mutual * 10, GFP_KERNEL);
 	if (!buf) {
-		input_err(true, &data->client->dev,
-				"%s failed to allocate memory!\n", HIMAX_LOG_TAG);
+		E("%s failed to allocate memory!\n", HIMAX_LOG_TAG);
 		goto END_OUPUT;
 	}
 
@@ -4413,14 +4431,13 @@ static void glove_mode(void *dev_data)
 		container_of(sec, struct himax_ts_data, sec);
 
 	sec_cmd_set_default_result(sec);
-	input_info(true, &data->client->dev, "%s %s,%d\n", HIMAX_LOG_TAG,
+	I("%s %s,%d\n", HIMAX_LOG_TAG,
 			__func__, sec->cmd_param[0]);
 
 	data->glove_enabled = sec->cmd_param[0];
 
 	if (data->suspended) {
-		input_err(true, &data->client->dev,
-			"%s %s: now IC status is not STATE_POWER_ON\n", HIMAX_LOG_TAG, __func__);
+		E("%s %s: now IC status is not STATE_POWER_ON\n", HIMAX_LOG_TAG, __func__);
 		snprintf(buf, sizeof(buf), "%s", "TSP_turned_off");
 		sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
 		goto out;
@@ -4429,22 +4446,19 @@ static void glove_mode(void *dev_data)
 	switch (sec->cmd_param[0]) {
 	case 0:
 		sec->cmd_state = SEC_CMD_STATUS_OK;
-		input_info(true, &data->client->dev,
-				"%s %s(), Unset Glove Mode\n", HIMAX_LOG_TAG,
+		I("%s %s(), Unset Glove Mode\n", HIMAX_LOG_TAG,
 				__func__);
 		g_core_fp.fp_set_HSEN_enable(0, false);
 		break;
 	case 1:
 		sec->cmd_state = SEC_CMD_STATUS_OK;
-		input_info(true, &data->client->dev,
-				"%s %s(), Set Glove Mode\n", HIMAX_LOG_TAG,
+		I("%s %s(), Set Glove Mode\n", HIMAX_LOG_TAG,
 				__func__);
 		g_core_fp.fp_set_HSEN_enable(1, false);
 		break;
 	default:
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
-		input_info(true, &data->client->dev,
-				"%s %s(), Invalid Argument\n", HIMAX_LOG_TAG,
+		I("%s %s(), Invalid Argument\n", HIMAX_LOG_TAG,
 				__func__);
 		break;
 	}
@@ -4457,24 +4471,93 @@ out:
 	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
 	sec_cmd_set_cmd_exit(sec);
 
-	input_info(true, &data->client->dev, "%s %s: %s(%d)\n", HIMAX_LOG_TAG,
+	I("%s %s: %s(%d)\n", HIMAX_LOG_TAG,
 			__func__, buf, (int)strnlen(buf, sizeof(buf)));
+}
+
+#ifdef HX_SMART_WAKEUP
+static void aot_enable(void *dev_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
+	struct himax_ts_data *ts = container_of(sec, struct himax_ts_data, sec);
+	char buf[16] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	switch (sec->cmd_param[0]) {
+	case 0:
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+		I("%s: Unset AOT Mode\n", __func__);
+		ts->gesture_cust_en[0] = 0;
+		ts->SMWP_enable = 0;
+#if defined(CONFIG_SEC_AOT)
+		aot_enabled = 0;
+#endif
+		g_core_fp.fp_set_SMWP_enable(ts->SMWP_enable, ts->suspended);
+		break;
+	case 1:
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+		I("%s: Set AOT Mode\n", __func__);
+		ts->gesture_cust_en[0] = 1;
+		ts->SMWP_enable = 1;
+#if defined(CONFIG_SEC_AOT)
+		aot_enabled = 1;
+#endif
+		g_core_fp.fp_set_SMWP_enable(ts->SMWP_enable, ts->suspended);
+		break;
+	default:
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		I("%s: Invalid Argument\n", __func__);
+		break;
+	}
+
+	if (sec->cmd_state == SEC_CMD_STATUS_OK)
+		snprintf(buf, sizeof(buf), "OK");
+	else
+		snprintf(buf, sizeof(buf), "NG");
+
+	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+	sec_cmd_set_cmd_exit(sec);
+
+	I("%s %s: %s\n", HIMAX_LOG_TAG, __func__, buf);
+}
+#endif
+
+/*
+ * read_support_feature function
+ * returns the bit combination of specific feature that is supported.
+ */
+static ssize_t read_support_feature(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct himax_ts_data *ts = container_of(sec, struct himax_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+	u32 feature = 0;
+
+	if (ts->pdata->support_aot)
+		feature |= INPUT_FEATURE_ENABLE_SETTINGS_AOT;
+
+	snprintf(buff, sizeof(buff), "%d", feature);
+	I("%s: %s\n", __func__, buff);
+
+	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 }
 
 static void factory_cmd_result_all(void *dev_data)
 {
-	char buf[SEC_CMD_STR_LEN] = { 0 };
+//	char buf[SEC_CMD_STR_LEN] = { 0 };
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
-	struct himax_ts_data *data =
-		container_of(sec, struct himax_ts_data, sec);
+//	struct himax_ts_data *data =
+//		container_of(sec, struct himax_ts_data, sec);
 
 	sec->item_count = 0;
 	memset(sec->cmd_result_all, 0x00, SEC_CMD_RESULT_STR_LEN);
 
 	sec->cmd_all_factory_state = SEC_CMD_STATUS_RUNNING;
 
-	snprintf(buf, sizeof(buf), "%d", data->pdata->item_version);
-	sec_cmd_set_cmd_result_all(sec, buf, sizeof(buf), "ITEM_VERSION");
+//	snprintf(buf, sizeof(buf), "%d", data->pdata->item_version);
+//	sec_cmd_set_cmd_result_all(sec, buf, sizeof(buf), "ITEM_VERSION");
 
 	get_chip_vendor(sec);
 	get_chip_name(sec);
@@ -4492,7 +4575,7 @@ static void factory_cmd_result_all(void *dev_data)
 	/*get_lp_noise(sec);*/
 
 	sec->cmd_all_factory_state = SEC_CMD_STATUS_OK;
-	input_info(true, &data->client->dev, "%s %s: %d%s\n", HIMAX_LOG_TAG,
+	I("%s %s: %d%s\n", HIMAX_LOG_TAG,
 			__func__, sec->item_count, sec->cmd_result_all);
 }
 
@@ -4518,7 +4601,7 @@ struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("get_x_num", get_all_x_num),},
 	{SEC_CMD("get_y_num", get_all_y_num),},
 	{SEC_CMD("get_rawcap", get_rawcap),},
-	{SEC_CMD("get_rawcap_all", get_rawcap_all),},
+	{SEC_CMD("run_get_rawcap_all", run_get_rawcap_all),},
 	{SEC_CMD("get_open", get_open),},
 	{SEC_CMD("get_open_all", get_open_all),},
 	{SEC_CMD("get_mic_open", get_mic_open),},
@@ -4541,18 +4624,27 @@ struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("set_grip_data", set_grip_data),},
 	{SEC_CMD("factory_cmd_result_all", factory_cmd_result_all),},
 	{SEC_CMD("glove_mode", glove_mode),},
+#ifdef HX_SMART_WAKEUP
+	{SEC_CMD("aot_enable", aot_enable),},
+#endif
 	{SEC_CMD("not_support_cmd", not_support_cmd),},
 };
 
 /* sensitivity mode test */
-extern int hx_set_sram_raw(int set_val);
+extern int hx_set_stack_raw(int set_val);
 static ssize_t sensitivity_mode_show(struct device *dev,
 					struct device_attribute *attr, char *buf)
 {
-	int result[5] = { 0 };
+	int result[9] = { 0 };
 	hx_sensity_test(result);
-	return snprintf(buf, 256, "%d,%d,%d,%d,%d", result[0], result[1],
-			result[2], result[3], result[4]);
+	I("%s: %d,%d,%d,%d,%d,%d,%d,%d,%d", __func__,
+			result[0], result[1], result[2],
+			result[3], result[4], result[5],
+			result[6], result[7], result[8]);
+	return snprintf(buf, 256, "%d,%d,%d,%d,%d,%d,%d,%d,%d",
+			result[0], result[1], result[2],
+			result[3], result[4], result[5],
+			result[6], result[7], result[8]);
 }
 
 static ssize_t sensitivity_mode_store(struct device *dev,
@@ -4562,8 +4654,7 @@ static ssize_t sensitivity_mode_store(struct device *dev,
 	int mode;
 
 	if (kstrtoint(buf, 10, &mode) < 0) {
-		input_err(true, &private_ts->client->dev,
-				"%s %s kstrtoint fail\n", HIMAX_LOG_TAG, __func__);
+		E("%s %s kstrtoint fail\n", HIMAX_LOG_TAG, __func__);
 		return count;
 	}
 
@@ -4571,14 +4662,12 @@ static ssize_t sensitivity_mode_store(struct device *dev,
 		return count;
 
 	if (mode == 0) {
-		hx_set_sram_raw(0);	// stop test
-		input_info(true, &private_ts->client->dev,
-				"%s %sTurn off Sensitivity Measurement\n",
+		hx_set_stack_raw(0);	// stop test
+		I("%s %sTurn off Sensitivity Measurement\n",
 				HIMAX_LOG_TAG, __func__);
 	} else {
-		hx_set_sram_raw(1);	// start test
-		input_info(true, &private_ts->client->dev,
-				"%s %sTurn on Sensitivity Measurement\n",
+		hx_set_stack_raw(1);	// start test
+		I("%s %sTurn on Sensitivity Measurement\n",
 				HIMAX_LOG_TAG, __func__);
 	}
 
@@ -4588,10 +4677,12 @@ static ssize_t sensitivity_mode_store(struct device *dev,
 static DEVICE_ATTR(sensitivity_mode, S_IRUGO | S_IWUSR | S_IWGRP,
 			sensitivity_mode_show, sensitivity_mode_store);
 static DEVICE_ATTR(close_tsp_test, S_IRUGO, show_close_tsp_test, NULL);
+static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 
 static struct attribute *sec_touch_factory_attributes[] = {
 	&dev_attr_sensitivity_mode.attr,
 	&dev_attr_close_tsp_test.attr,
+	&dev_attr_support_feature.attr,
 	NULL,
 };
 
@@ -4607,23 +4698,20 @@ int sec_touch_sysfs(struct himax_ts_data *data)
 	ret = sec_cmd_init(&data->sec, sec_cmds,
 				ARRAY_SIZE(sec_cmds), SEC_CLASS_DEVT_TSP);
 	if (ret < 0) {
-		input_err(true, &data->client->dev,
-				"%s %s Failed to create device (tsp)!\n",
+		E("%s %s Failed to create device (tsp)!\n",
 				HIMAX_LOG_TAG, __func__);
 		goto err_init_cmd;
 	}
 	ret = sysfs_create_link(&data->sec.fac_dev->kobj,
 				&data->input_dev->dev.kobj, "input");
 	if (ret < 0)
-		input_err(true, &data->client->dev,
-				"%s %s: Failed to create input symbolic link\n",
+		E("%s %s: Failed to create input symbolic link\n",
 				HIMAX_LOG_TAG, __func__);
 
 	/* /sys/class/sec/tsp/... */
 	if (sysfs_create_group
 		(&data->sec.fac_dev->kobj, &sec_touch_factory_attr_group)) {
-		input_err(true, &data->client->dev,
-				"%s %sFailed to create sysfs group(tsp)!\n",
+		E("%s %sFailed to create sysfs group(tsp)!\n",
 				HIMAX_LOG_TAG, __func__);
 		goto err_sec_fac_dev_attr;
 	}
@@ -4677,7 +4765,7 @@ EXPORT_SYMBOL(sec_touch_sysfs);
 
 void sec_touch_sysfs_remove(struct himax_ts_data *data)
 {
-	input_err(true, &data->client->dev, "%s %s: Entering!\n", HIMAX_LOG_TAG,
+	E("%s %s: Entering!\n", HIMAX_LOG_TAG,
 			__func__);
 	sysfs_remove_link(&data->sec.fac_dev->kobj, "input");
 	sysfs_remove_group(&data->sec.fac_dev->kobj,
@@ -4705,7 +4793,7 @@ void sec_touch_sysfs_remove(struct himax_ts_data *data)
 	g_sec_raw_buff->f_ready_gap_hor = HX_RAWDATA_NOT_READY;
 
 	kfree(g_sec_raw_buff);
-	input_err(true, &data->client->dev, "%s %s: End!\n", HIMAX_LOG_TAG,
+	E("%s %s: End!\n", HIMAX_LOG_TAG,
 			__func__);
 }
 

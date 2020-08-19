@@ -42,6 +42,7 @@
 #define REG_SAR_TOTALCAP	0x16
 #define REG_SAR_MODE		0x17
 #define REG_SAR_TOTALCAP_READ	0x18
+#define REG_GRIP_ALWAYS_ACTIVE	0x20
 #define REG_SW_RESET		0x1A
 #define REG_SAR_ENABLE		0x24
 #define REG_SAR_SENSING		0x25
@@ -63,6 +64,8 @@
 #define CMD_ON			0x20
 #define CMD_OFF			0x10
 #define CMD_SW_RESET		0x10
+
+#define GRIP_ALWAYS_ACTIVE_READY	0x21
 
 #define BOOT_DELAY		45000
 #define RESET_DELAY		150000

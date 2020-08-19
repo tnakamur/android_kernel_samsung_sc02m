@@ -122,7 +122,8 @@ u8 rkp_ro_page(unsigned long addr);
 static inline unsigned int cmp_sec_integrity(const struct cred *cred,struct mm_struct *mm)
 {
 	return ((cred->bp_task != current) || 
-			(mm && (!( in_interrupt() || in_softirq())) && 
+			(mm && (!( in_interrupt() || in_softirq())) &&
+			(cred->bp_pgd != swapper_pg_dir) &&
 			(mm->pgd != cred->bp_pgd)));
 			
 }

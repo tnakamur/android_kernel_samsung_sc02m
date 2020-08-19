@@ -437,21 +437,6 @@ void s5p_mfc_dump_power_clk_status(void)
 	}
 }
 
-/*
-From 5b315bd287fb7be36086382883ee82bdcb1ef2be Mon Sep 17 00:00:00 2001
-From: Srinivasa Reddy DeviReddy <srinivasa.d@samsung.com>
-Date: Fri, 23 Aug 2019 10:33:19 +0530
-Subject: [PATCH] [7885] media: mfc: Added Dynamic DPB Debug Information
-
-Added debug Info to dump the values of Dynamic DPB Flag,
-Reference Queue, Destination Queue and File Descriptors.
-This information will be helpful to trace the reference
-and output buffers during pagefault.
-
-Change-Id: If1c8acaa0dc81e7acbb7bba7a47b1ba9776433ef
-Signed-off-by: Srinivasa Reddy DeviReddy <srinivasa.d@samsung.com>
-*/
-
 void s5p_mfc_dump_dynamic_dpb_info(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *ctx = dev->ctx[dev->curr_ctx];
@@ -494,10 +479,10 @@ void s5p_mfc_dump_info(struct s5p_mfc_dev *dev)
 	mfc_save_logging_sfr(dev);
 	mfc_dump_regs(dev);
 	s5p_mfc_dump_power_clk_status();
-	
+
 	if (dev->ctx[dev->curr_ctx]->type == MFCINST_DECODER)
 		s5p_mfc_dump_dynamic_dpb_info(dev);
-	
+
 	exynos_sysmmu_show_status(dev->device);
 }
 

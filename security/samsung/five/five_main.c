@@ -30,6 +30,7 @@
 #include <linux/reboot.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
+#include <linux/shmem_fs.h>
 
 #include "five.h"
 #include "five_audit.h"
@@ -38,16 +39,15 @@
 #include "five_pa.h"
 #include "five_porting.h"
 #include "five_cache.h"
+#include "five_dmverity.h"
+#include "five_dsms.h"
 
 static const bool unlink_on_error;	// false
 
-#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 static const bool check_dex2oat_binary = true;
 static const bool check_memfd_file = true;
-#else
-static const bool check_dex2oat_binary;
-static const bool check_memfd_file;
-#endif
+
+static struct file *memfd_file __ro_after_init;
 
 static struct workqueue_struct *g_five_workqueue;
 
@@ -125,6 +125,36 @@ error:
 static inline int is_five_enabled(void)
 {
 	return five_enabled;
+}
+
+int five_fcntl_debug(struct file *file, void __user *argp)
+{
+	struct inode *inode;
+	struct five_stat stat = {0};
+	struct integrity_iint_cache *iint;
+
+	if (unlikely(!file || !argp))
+		return -EINVAL;
+
+	inode = file_inode(file);
+
+	inode_lock(inode);
+	iint = integrity_inode_get(inode);
+	if (unlikely(!iint)) {
+		inode_unlock(inode);
+		return -ENOMEM;
+	}
+
+	stat.cache_status = five_get_cache_status(iint);
+	stat.cache_iversion = inode_query_iversion(iint->inode);
+	stat.inode_iversion = inode_query_iversion(inode);
+
+	inode_unlock(inode);
+
+	if (unlikely(copy_to_user(argp, &stat, sizeof(stat))))
+		return -EFAULT;
+
+	return 0;
 }
 #else
 static int __init init_fs(void)
@@ -317,7 +347,8 @@ static int push_file_event_bunch(struct task_struct *task, struct file *file,
 	return rc;
 }
 
-static int push_reset_event(struct task_struct *task)
+static int push_reset_event(struct task_struct *task,
+		enum task_integrity_reset_cause cause, struct file *file)
 {
 	struct list_head dead_list;
 	struct task_integrity *current_tint;
@@ -329,6 +360,8 @@ static int push_reset_event(struct task_struct *task)
 	INIT_LIST_HEAD(&dead_list);
 	current_tint = task->integrity;
 	task_integrity_get(current_tint);
+
+	task_integrity_set_reset_reason(current_tint, cause, file);
 
 	five_reset = five_event_create(FIVE_RESET_INTEGRITY, task, NULL, 0,
 		GFP_KERNEL);
@@ -358,9 +391,10 @@ static int push_reset_event(struct task_struct *task)
 	return 0;
 }
 
-void task_integrity_delayed_reset(struct task_struct *task)
+void task_integrity_delayed_reset(struct task_struct *task,
+		enum task_integrity_reset_cause cause, struct file *file)
 {
-	push_reset_event(task);
+	push_reset_event(task, cause, file);
 }
 
 static void five_check_last_writer(struct integrity_iint_cache *iint,
@@ -373,7 +407,7 @@ static void five_check_last_writer(struct integrity_iint_cache *iint,
 
 	inode_lock(inode);
 	if (atomic_read(&inode->i_writecount) == 1) {
-		if (iint->version != inode->i_version)
+		if (!inode_eq_iversion(inode, iint->version))
 			five_set_cache_status(iint, FIVE_FILE_UNKNOWN);
 	}
 	iint->five_signing = false;
@@ -428,22 +462,33 @@ static inline bool is_dex2oat_binary(const struct file *file)
 {
 	const char *pathname = NULL;
 	char *pathbuf = NULL;
-	const char dex2oat_full_path[] =
-		"/apex/com.android.runtime/bin/dex2oat";
+	const char * const dex2oat_full_path[] = {
+		"/apex/com.android.art/bin/dex2oat",	/* R OS */
+		"/apex/com.android.runtime/bin/dex2oat"	/* Q OS */
+	};
 	bool res = false;
+	size_t i;
 
 	if (!file || !file->f_path.dentry)
 		return false;
 
 	if (strncmp(file->f_path.dentry->d_iname, "dex2oat",
-			sizeof("dex2oat") - 1))
+			sizeof("dex2oat")))
 		return false;
 
 	pathname = five_d_path(&file->f_path, &pathbuf);
-	if (pathname && !strncmp(pathname, dex2oat_full_path,
-					sizeof(dex2oat_full_path) - 1))
-		res = true;
+	if (!pathname)
+		goto exit;
 
+	for (i = 0; i < ARRAY_SIZE(dex2oat_full_path); ++i) {
+		if (!strncmp(pathname, dex2oat_full_path[i],
+					strlen(dex2oat_full_path[i]) + 1)) {
+			res = true;
+			break;
+		}
+	}
+
+exit:
 	if (pathbuf)
 		__putname(pathbuf);
 
@@ -485,7 +530,7 @@ static void process_file(struct task_struct *task,
 			int function,
 			struct file_verification_result *result)
 {
-	struct inode *inode = file_inode(file);
+	struct inode *inode = d_real_inode(file_dentry(file));
 	struct integrity_iint_cache *iint = NULL;
 	struct five_cert cert = { {0} };
 	struct five_cert *pcert = NULL;
@@ -508,7 +553,8 @@ static void process_file(struct task_struct *task,
 		goto out;
 	}
 
-	xattr_len = five_read_xattr(file->f_path.dentry, &xattr_value);
+	xattr_len = five_read_xattr(d_real_comp(file->f_path.dentry),
+			&xattr_value);
 	if (xattr_value && xattr_len) {
 		rc = five_cert_fillout(&cert, xattr_value, xattr_len);
 		if (rc) {
@@ -538,7 +584,7 @@ out:
 	result->iint = iint;
 	result->fn = function;
 	result->xattr = xattr_value;
-	result->xattr_len = xattr_len;
+	result->xattr_len = (size_t)xattr_len;
 
 	if (!iint || five_get_cache_status(iint) == FIVE_FILE_UNKNOWN
 			|| five_get_cache_status(iint) == FIVE_FILE_FAIL)
@@ -582,12 +628,14 @@ static void process_measurement(const struct processing_event_list *params)
 static bool is_memfd_file(struct file *file)
 {
 	struct inode *inode;
+	struct inode *memfd_inode;
 
 	if (!file)
 		return false;
 
+	memfd_inode = file_inode(memfd_file);
 	inode = file_inode(file);
-	if (inode && inode->i_sb && inode->i_sb->s_magic == TMPFS_MAGIC)
+	if (inode && memfd_inode && inode->i_sb == memfd_inode->i_sb)
 		if (file->f_path.dentry &&
 			!strncmp(file->f_path.dentry->d_iname, MFD_NAME_PREFIX,
 							MFD_NAME_PREFIX_LEN))
@@ -781,7 +829,7 @@ static struct notifier_block five_reboot_nb = {
 	.priority = INT_MAX,
 };
 
-int five_hash_algo = HASH_ALGO_SHA1;
+int five_hash_algo __ro_after_init = HASH_ALGO_SHA1;
 
 static int __init hash_setup(const char *str)
 {
@@ -819,7 +867,27 @@ static int __init init_five(void)
 	if (error)
 		return error;
 
+/**
+ * This empty file is needed in is_memfd_file() function.
+ * The only way to check whether the file was created using memfd_create()
+ * syscall is to compare its superblock address with address of another memfd
+ * file.
+ */
+	memfd_file = shmem_kernel_file_setup(
+				"five_memfd_check", 0, VM_NORESERVE);
+	if (IS_ERR(memfd_file)) {
+		error = PTR_ERR(memfd_file);
+		memfd_file = NULL;
+		return error;
+	}
+
 	error = init_fs();
+	if (error)
+		return error;
+
+	five_dsms_init("1", 0);
+
+	error = five_init_dmverity();
 
 	return error;
 }
@@ -943,7 +1011,7 @@ int five_ptrace(struct task_struct *task, long request)
 		if (task_integrity_user_read(tint) == INTEGRITY_NONE)
 			break;
 
-		task_integrity_delayed_reset(task);
+		task_integrity_delayed_reset(task, CAUSE_PTRACE, NULL);
 		five_audit_err(task, NULL, "ptrace", task_integrity_read(tint),
 				INTEGRITY_NONE, "reset-integrity", 0);
 		break;
@@ -961,7 +1029,7 @@ int five_process_vm_rw(struct task_struct *task, int write)
 		if (task_integrity_user_read(tint) == INTEGRITY_NONE)
 			goto exit;
 
-		task_integrity_delayed_reset(task);
+		task_integrity_delayed_reset(task, CAUSE_VMRW, NULL);
 		five_audit_err(task, NULL, "process_vm_rw",
 				task_integrity_read(tint), INTEGRITY_NONE,
 							"reset-integrity", 0);

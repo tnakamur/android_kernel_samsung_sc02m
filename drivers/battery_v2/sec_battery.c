@@ -4233,7 +4233,7 @@ static void sec_bat_cable_work(struct work_struct *work)
 		(is_wireless_type(battery->cable_type) && is_wired_type(current_cable_type)))
 		battery->max_charge_power = 0;
 
-	if ((current_cable_type == battery->cable_type) && !battery->slate_mode) {
+	if ((current_cable_type == battery->cable_type) && !battery->slate_mode && !battery->usb_suspend_mode) {
 		dev_dbg(battery->dev,
 				"%s: Cable is NOT Changed(%d)\n",
 				__func__, battery->cable_type);
@@ -4344,6 +4344,12 @@ static void sec_bat_cable_work(struct work_struct *work)
 		sec_bat_set_charging_status(battery,
 			POWER_SUPPLY_STATUS_DISCHARGING);
 		sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_BUCK_OFF);
+#if defined (CONFIG_ENABLE_USB_SUSPEND_STATE)
+	} else if (battery->usb_suspend_mode) {
+		dev_info(battery->dev,
+				"%s:usb suspend mode on\n",__func__);
+		sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_BUCK_OFF);
+#endif
 	} else {
 #if defined(CONFIG_EN_OOPS)
 		val.intval = battery->cable_type;
@@ -4491,6 +4497,7 @@ static void sec_bat_afc_work(struct work_struct *work)
 			battery->current_max >= battery->pdata->pre_afc_input_current)) {
 			sec_bat_set_charging_current(battery);
 		}
+		power_supply_changed(battery->psy_bat);
 	}
 	wake_unlock(&battery->afc_wake_lock);
 }
@@ -4819,11 +4826,10 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			} else if (is_hv_wire_type(battery->cable_type)) {
 				check_val = 1;
 #if defined(CONFIG_CCIC_NOTIFIER)
-			} else if (is_pd_wire_type(battery->cable_type)) {
-				if (battery->pd_max_charge_power >= HV_CHARGER_STATUS_STANDARD1 &&
-					battery->pdic_info.sink_status.available_pdo_num > 1) {
-					check_val = 1;
-				}
+			} else if (is_pd_wire_type(battery->cable_type) &&
+				(battery->pd_max_charge_power >= HV_CHARGER_STATUS_STANDARD1) &&
+				(battery->pdic_info.sink_status.available_pdo_num > 1)) {
+				check_val = 1;
 #endif
 			} else if (battery->wire_status == SEC_BATTERY_CABLE_PREPARE_TA) {
 				check_val = 1;
@@ -4936,7 +4942,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 					POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING, value);
 
 			for (j = 0; j < 5; j++) {
-				mdelay(200);
+				msleep(200);
 				psy_do_property(battery->pdata->fuelgauge_name, get,
 					POWER_SUPPLY_PROP_VOLTAGE_NOW, value);
 				ocv_data[j] = value.intval;
@@ -6811,6 +6817,32 @@ ssize_t sec_bat_store_attrs(
 	return ret;
 }
 
+#if defined(CONFIG_ENABLE_USB_SUSPEND_STATE)
+static void sec_bat_do_suspend_resume(struct sec_battery_info * battery, int mode) {
+	/* 1: suspend mode, 100: unconfigured */
+	pr_info("%s: mode: %d, battery->usb_suspend_mode: %d, cable_type: %s\n",
+			__func__, mode, battery->usb_suspend_mode, sec_cable_type[battery->cable_type]);
+	if (mode == USB_CURRENT_UNCONFIGURED)
+		mode = 0;
+	
+	if ((battery->cable_type == SEC_BATTERY_CABLE_USB) && !lpcharge) {
+		if (battery->usb_suspend_mode != mode) {
+			if (mode == 1) {
+				pr_info("%s: usb suspend\n", __func__);
+				battery->usb_suspend_mode = true;
+			} else {
+				pr_info("%s: usb unconfigured\n", __func__);
+				battery->usb_suspend_mode = false;
+				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
+			}
+			wake_lock(&battery->cable_wake_lock);
+			queue_delayed_work(battery->monitor_wqueue,
+				&battery->cable_work, 0);
+		}
+	}
+}
+#endif
+
 static int sec_bat_create_attrs(struct device *dev)
 {
 	unsigned long i = 0;
@@ -7038,6 +7070,9 @@ static int sec_bat_set_property(struct power_supply *psy,
 		case POWER_SUPPLY_EXT_PROP_USB_CONFIGURE:
 			pr_info("%s: usb configured %d\n", __func__, val->intval);
 			if (val->intval == USB_CURRENT_UNCONFIGURED) {
+#if defined (CONFIG_ENABLE_USB_SUSPEND_STATE)
+				sec_bat_do_suspend_resume(battery, USB_CURRENT_UNCONFIGURED);
+#endif
 				sec_bat_set_current_event(battery, SEC_BAT_CURRENT_EVENT_USB_100MA,
 							(SEC_BAT_CURRENT_EVENT_USB_100MA | SEC_BAT_CURRENT_EVENT_USB_SUPER));
 			} else if (val->intval == battery->pdata->default_usb_output_current) {
@@ -7053,6 +7088,11 @@ static int sec_bat_set_property(struct power_supply *psy,
 							(SEC_BAT_CURRENT_EVENT_USB_100MA | SEC_BAT_CURRENT_EVENT_USB_SUPER));
 				sec_bat_change_default_current(battery, SEC_BATTERY_CABLE_USB,
 						USB_CURRENT_SUPER_SPEED, USB_CURRENT_SUPER_SPEED);
+			} else {
+#if defined (CONFIG_ENABLE_USB_SUSPEND_STATE)
+				if (val->intval == USB_CURRENT_SUSPENDED)
+					sec_bat_do_suspend_resume(battery, USB_CURRENT_SUSPENDED);
+#endif
 			}
 			sec_bat_set_charging_current(battery);
 			break;
@@ -7110,6 +7150,13 @@ static int sec_bat_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		if (battery->cable_type == SEC_BATTERY_CABLE_NONE) {
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
+		} else if (battery->current_event & SEC_BAT_CURRENT_EVENT_AFC ||
+			battery->cable_type == SEC_BATTERY_CABLE_PREPARE_TA ||
+			battery->cable_type == SEC_BATTERY_CABLE_HV_TA_CHG_LIMIT ||
+			is_hv_wire_type(battery->cable_type) ||
+			is_pd_wire_type(battery->cable_type) ||
+			delayed_work_pending(&battery->slowcharging_work)) {
+			val->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
 		} else {
 			psy_do_property(battery->pdata->charger_name, get,
 				POWER_SUPPLY_PROP_CHARGE_TYPE, value);
@@ -8011,6 +8058,7 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 		case MUIC_NOTIFY_CMD_DETACH:
 		case MUIC_NOTIFY_CMD_LOGICALLY_DETACH:
 			cmd = "DETACH";
+			battery->usb_suspend_mode = false;
 			battery->is_jig_on = false;
 			battery->pd_usb_attached = false;
 			cable_type = SEC_BATTERY_CABLE_NONE;
@@ -8089,6 +8137,9 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 		}
 
 		cmd = "PD_ATTACH";
+		/* Prevent PD Charge test fail */
+		battery->usb_suspend_mode = false;
+		
 		if ((*(struct pdic_notifier_struct *)usb_typec_info.pd).event == PDIC_NOTIFY_EVENT_CCIC_ATTACH) {
 			battery->pdic_info.sink_status.rp_currentlvl =
 				(*(struct pdic_notifier_struct *)usb_typec_info.pd).sink_status.rp_currentlvl;
@@ -10304,6 +10355,7 @@ static int sec_battery_probe(struct platform_device *pdev)
 	battery->factory_mode = false;
 	battery->store_mode = false;
 	battery->slate_mode = false;
+	battery->usb_suspend_mode = false;
 	battery->is_hc_usb = false;
 	battery->is_sysovlo = false;
 	battery->is_vbatovlo = false;

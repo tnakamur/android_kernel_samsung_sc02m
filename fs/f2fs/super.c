@@ -23,6 +23,7 @@
 #include <linux/f2fs_fs.h>
 #include <linux/sysfs.h>
 #include <linux/quota.h>
+#include <linux/nls.h>
 
 #include "f2fs.h"
 #include "node.h"
@@ -465,6 +466,11 @@ static int f2fs_check_quota_options(struct f2fs_sb_info *sbi)
 	return 0;
 }
 #endif
+
+static int f2fs_keypress_callback_fn(struct super_block *sb)
+{
+	return blkdev_issue_flush(sb->s_bdev, GFP_KERNEL, NULL);
+}
 
 static int parse_options(struct super_block *sb, char *options)
 {
@@ -982,6 +988,18 @@ static int parse_options(struct super_block *sb, char *options)
 	 */
 	if (F2FS_OPTION(sbi).active_logs != NR_CURSEG_TYPE)
 		F2FS_OPTION(sbi).whint_mode = WHINT_MODE_OFF;
+
+	if (F2FS_OPTION(sbi).fsync_mode == FSYNC_MODE_NOBARRIER) {
+		char volume_name[MAX_VOLUME_NAME];
+
+		utf16s_to_utf8s(sbi->raw_super->volume_name, MAX_VOLUME_NAME,
+					UTF16_LITTLE_ENDIAN, volume_name, MAX_VOLUME_NAME);
+		if (!strcmp(volume_name, "data")) {
+			keypress_callback_sb = sb;
+			keypress_callback_fn = f2fs_keypress_callback_fn;
+		}
+	}
+
 	return 0;
 }
 
@@ -1588,6 +1606,21 @@ static void default_options(struct f2fs_sb_info *sbi)
 #endif
 
 	f2fs_build_fault_attr(sbi, 0, 0);
+
+	if (sbi->raw_super->mount_opts[0]) {
+		struct super_block *sb = sbi->sb;
+		int err;
+		char *mount_opts = kstrndup(sbi->raw_super->mount_opts,
+				sizeof(sbi->raw_super->mount_opts),
+				GFP_KERNEL);
+		if (!mount_opts)
+			return;
+		err = parse_options(sb, mount_opts);
+		if (err)
+			f2fs_msg(sb, KERN_WARNING,
+				"failed to parse options in superblock\n");
+		kfree(mount_opts);
+	}
 }
 
 #ifdef CONFIG_QUOTA
@@ -2870,6 +2903,9 @@ static void init_sb_info(struct f2fs_sb_info *sbi)
 
 	sbi->dirty_device = 0;
 	spin_lock_init(&sbi->dev_lock);
+
+	/* FUA Mode : ROOT & Quota */
+	sbi->s_sec_cond_fua_mode = F2FS_SEC_FUA_ROOT;
 
 	init_rwsem(&sbi->sb_lock);
 }

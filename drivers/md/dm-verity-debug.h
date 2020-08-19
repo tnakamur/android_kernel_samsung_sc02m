@@ -24,10 +24,10 @@ struct blks_info{
 
     /* fec corrected blocks list */
     sector_t fc_blks_list[MAX_FC_BLKS_LIST + FOR_SAFE]; 
-    char dev_name[MAX_FC_BLKS_LIST + FOR_SAFE][MAX_DEV_NAME],fec_off_list[MAX_DEV_LIST][MAX_DEV_NAME];
+    char dev_name[MAX_FC_BLKS_LIST + FOR_SAFE][MAX_DEV_NAME],fec_off_list[MAX_DEV_LIST][MAX_DEV_NAME],dmv_ctr_list[MAX_DEV_LIST][MAX_DEV_NAME];
     /* The "list_idx" value is the location of the new correct_blk to be entered for fc_blks_list []. */
     int list_idx; 
-    atomic_t fec_off_cnt;
+    atomic_t fec_off_cnt,dmv_ctr_cnt;
 };
 extern struct blks_info *b_info;
 extern int ignore_fs_panic;
@@ -47,6 +47,7 @@ extern long long get_fec_correct_blks(void);
 extern long long get_corrupted_blks(void);
 extern long long get_prev_total_blks(void);
 extern int get_fec_off_cnt(void);
+extern int get_dmv_ctr_cnt(void);
 extern struct blks_info * get_b_info(char* dev_name);
 /* set */
 extern void set_prev_total_blks(long long val);

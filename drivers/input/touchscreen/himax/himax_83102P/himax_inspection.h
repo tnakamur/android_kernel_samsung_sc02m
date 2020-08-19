@@ -38,7 +38,7 @@
 #endif
 
 #define BS_RAWDATA	10
-#define BS_NOISE	10
+#define BS_NOISE	100
 #define BS_OPENSHORT	0
 #define	BS_LPWUG	1
 #define	BS_LPWUG_dile	1

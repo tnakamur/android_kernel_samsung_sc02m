@@ -40,10 +40,11 @@
 #include "tas2562-codec.h"
 #include "tas2562-misc.h"
 #ifdef CONFIG_TAS25XX_ALGO
-#include <dsp/smart_amp.h>
+#include <sound/smart_amp.h>
 #endif /*CONFIG_TAS25XX_ALGO*/
  
-static char p_icn[] = {0x00, 0x03, 0x46, 0xdc};
+static char p_icn_threshold[] = {0x00, 0x01, 0x2f, 0x2c};
+static char p_icn_hysteresis[] = {0x00, 0x01, 0x5d, 0xc0};
 
 static int tas2562_regmap_write(struct tas2562_priv *p_tas2562,
 	unsigned int reg, unsigned int value)
@@ -475,15 +476,29 @@ static void tas2562_hw_reset(struct tas2562_priv *p_tas2562)
 {
 	if (gpio_is_valid(p_tas2562->mn_reset_gpio)) {
 		gpio_direction_output(p_tas2562->mn_reset_gpio, 0);
+
+		if(p_tas2562->mn_channels != 1) {
+			dev_dbg(p_tas2562->dev, "Reset gpio: not mono case, resetting second gpio");
 		if(gpio_is_valid(p_tas2562->mn_reset_gpio2))
 			gpio_direction_output(p_tas2562->mn_reset_gpio2, 0);
+		} else {
+			dev_dbg(p_tas2562->dev, "Reset gpio: mono case, not resetting second gpio");
+		}
 		msleep(20);
+
 		gpio_direction_output(p_tas2562->mn_reset_gpio, 1);
+
+		if(p_tas2562->mn_channels != 1) {
+			dev_dbg(p_tas2562->dev, "Reset gpio: not mono case, resetting second gpio");
 		if(gpio_is_valid(p_tas2562->mn_reset_gpio2))
 			gpio_direction_output(p_tas2562->mn_reset_gpio2, 1);
+		} else {
+			dev_dbg(p_tas2562->dev, "Reset gpio: mono case, not resetting second gpio");
+		}
+
 		msleep(20);
 	}
-	dev_err(p_tas2562->dev, "gpio up !!\n");
+	dev_info(p_tas2562->dev, "reset gpio up !!\n");
 
 	p_tas2562->mn_l_current_book = -1;
 	p_tas2562->mn_l_current_page = -1;
@@ -495,12 +510,19 @@ void tas2562_enable_irq(struct tas2562_priv *p_tas2562, bool enable)
 {
 	static int irq1_enabled = 0;
 	static int irq2_enabled = 0;
+	struct irq_desc *desc = NULL;
+
 	if (enable) {
 		if (p_tas2562->mb_irq_eable)
 			return;
 
 		if (gpio_is_valid(p_tas2562->mn_irq_gpio) && irq1_enabled == 0) {
+			desc = irq_to_desc(p_tas2562->mn_irq);
+			if (desc && desc->depth > 0) {
 			enable_irq(p_tas2562->mn_irq);
+			} else {
+				dev_info (p_tas2562->dev, "### irq already enabled");
+			}
 			irq1_enabled = 1;
 		}
 		if (gpio_is_valid(p_tas2562->mn_irq_gpio2) && irq2_enabled == 0) {
@@ -711,7 +733,13 @@ static void irq_work_routine(struct work_struct *work)
 
 			dev_info(p_tas2562->dev, "set ICN to -80dB\n");
 			n_result = p_tas2562->bulk_write(p_tas2562, chn,
-					TAS2562_ICN_REG, p_icn, 4);
+					TAS2562_ICN_THRESHOLD_REG,
+					p_icn_threshold,
+					sizeof(p_icn_threshold));
+			n_result = p_tas2562->bulk_write(p_tas2562, chn,
+					TAS2562_ICN_HYSTERESIS_REG,
+					p_icn_hysteresis,
+					sizeof(p_icn_hysteresis));
 
 			p_tas2562->read(p_tas2562, channel_left,
 					TAS2562_LATCHEDINTERRUPTREG0, &irqreg);
@@ -788,7 +816,14 @@ static void init_work_routine(struct work_struct *work)
 		TAS2562_POWERCONTROL_OPERATIONALMODE10_ACTIVE);
 
 	//dev_info(p_tas2562->dev, "set ICN to -80dB\n");
-	nResult = p_tas2562->bulk_write(p_tas2562, channel_both, TAS2562_ICN_REG, p_icn, 4);
+	p_tas2562->bulk_write(p_tas2562, channel_both,
+		TAS2562_ICN_THRESHOLD_REG,
+		p_icn_threshold,
+		sizeof(p_icn_threshold));
+	p_tas2562->bulk_write(p_tas2562, channel_both,
+		TAS2562_ICN_HYSTERESIS_REG,
+		p_icn_hysteresis,
+		sizeof(p_icn_hysteresis));
 
 	nResult = gpio_get_value(p_tas2562->mn_irq_gpio);
 	//dev_info(p_tas2562->dev, "%s, irq GPIO state: %d\n", __func__, nResult);
@@ -986,7 +1021,8 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 		tas2562_hw_reset(p_tas2562);
 	}
 
-	if (gpio_is_valid(p_tas2562->mn_reset_gpio2)) {
+	if (gpio_is_valid(p_tas2562->mn_reset_gpio2) &&
+			(p_tas2562->mn_channels == 2)) {
 		n_result = gpio_request(p_tas2562->mn_reset_gpio2,
 			"TAS2562_RESET2");
 		if (n_result) {
@@ -1005,7 +1041,7 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 	p_tas2562->update_bits = tas2562_dev_update_bits;
 	p_tas2562->hw_reset = tas2562_hw_reset;
 	p_tas2562->enable_irq = tas2562_enable_irq;
-#if 0
+#ifdef CODEC_PM
 	p_tas2562->runtime_suspend = tas2562_runtime_suspend;
 	p_tas2562->runtime_resume = tas2562_runtime_resume;
 	p_tas2562->mn_power_state = TAS2562_POWER_SHUTDOWN;
@@ -1038,26 +1074,18 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 
 		p_tas2562->mn_irq = gpio_to_irq(p_tas2562->mn_irq_gpio);
 		dev_info(p_tas2562->dev, "irq = %d\n", p_tas2562->mn_irq);
-		if(!p_tas2562->irq_work.timer.function)
-			dev_err(p_tas2562->dev, "%s: NULL function before init 1\n",__func__);
 		INIT_DELAYED_WORK(&p_tas2562->irq_work, irq_work_routine);
 		n_result = request_threaded_irq(p_tas2562->mn_irq,
 				tas2562_irq_handler,
 				NULL, IRQF_TRIGGER_FALLING|IRQF_ONESHOT,
 				p_client->name, p_tas2562);
-		if(!p_tas2562->irq_work.timer.function)
-			dev_err(p_tas2562->dev, "%s: NULL function after init 1\n",__func__);
 		if (n_result < 0) {
 			dev_err(p_tas2562->dev,
 				"request_irq failed, %d\n", n_result);
 			goto err;
 		}
-		if(!p_tas2562->irq_work.timer.function)
-			dev_err(p_tas2562->dev, "%s: NULL function after init 2\n",__func__);
 		disable_irq_nosync(p_tas2562->mn_irq);
 	}
-	if(!p_tas2562->irq_work.timer.function)
-		dev_err(p_tas2562->dev, "%s: NULL function after init 3\n",__func__);
 	if (gpio_is_valid(p_tas2562->mn_irq_gpio2) &&
 			(p_tas2562->mn_channels == 2)) {
 		n_result = gpio_request(p_tas2562->mn_irq_gpio2,
@@ -1085,12 +1113,8 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 		}
 		disable_irq_nosync(p_tas2562->mn_irq2);
 	}
-	if(!p_tas2562->irq_work.timer.function)
-		dev_err(p_tas2562->dev, "%s: NULL function after init 4\n",__func__);
 	tas2562_enable_irq(p_tas2562, true);
 	INIT_DELAYED_WORK(&p_tas2562->init_work, init_work_routine);
-	if(!p_tas2562->irq_work.timer.function)
-		dev_err(p_tas2562->dev, "%s: NULL function after init 5\n",__func__);
 #ifdef CONFIG_TAS2562_CODEC
 	mutex_init(&p_tas2562->codec_lock);
 	n_result = tas2562_register_codec(p_tas2562);

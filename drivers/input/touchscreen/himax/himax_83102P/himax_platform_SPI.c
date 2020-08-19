@@ -35,7 +35,10 @@ int himax_dev_set(struct himax_ts_data *ts)
 		return ret;
 	}
 
-	ts->input_dev->name = "himax-touchscreen";
+	//ts->input_dev->name = "himax-touchscreen";
+	ts->input_dev->name = "sec_touchscreen";
+	ts->input_dev->id.bustype = BUS_SPI;
+	ts->input_dev->dev.parent = &ts->spi->dev;
 #if defined(HX_PEN_FUNC_EN)
 	ts->hx_pen_dev = input_allocate_device();
 
@@ -174,10 +177,23 @@ int himax_parse_dt(struct himax_ts_data *ts,
 
 	I(" DT:gpio_irq=%d, gpio_rst=%d, gpio_3v3_en=%d\n", pdata->gpio_irq, pdata->gpio_reset, pdata->gpio_3v3_en);
 
+	of_property_read_string(dt, "himax,fw-path", &pdata->i_CTPM_firmware_name);
+
 	if (of_property_read_u32(dt, "report_type", &data) == 0) {
 		pdata->protocol_type = data;
 		I(" DT:protocol_type=%d\n", pdata->protocol_type);
 	}
+
+	if (of_property_read_u32(dt, "himax,factory_item_version", &pdata->item_version) < 0)
+		pdata->item_version = 0;
+
+	if (of_property_read_string(dt, "himax,project_name", &pdata->proj_name) < 0) {
+		/* prevent from kernel panic due to use strcmp with null pointer */
+		pdata->proj_name = "HIMAX";
+		D("parsing from dt FAIL!!!!!, use default project name = %s\n", pdata->proj_name);
+	}
+
+	pdata->support_aot = of_property_read_bool(dt, "support_aot");
 
 	himax_vk_parser(dt, pdata);
 	return 0;
@@ -321,7 +337,7 @@ void himax_int_enable(int enable)
 	int irqnum = ts->hx_irq;
 
 	spin_lock_irqsave(&ts->irq_lock, irqflags);
-	input_info(true, &ts->client->dev, "%s: Entering! irqnum = %d\n", __func__, irqnum);
+	I("%s: Entering! irqnum = %d\n", __func__, irqnum);
 	if (enable == 1 && atomic_read(&ts->irq_state) == 0) {
 		atomic_set(&ts->irq_state, 1);
 		enable_irq(irqnum);
@@ -332,7 +348,7 @@ void himax_int_enable(int enable)
 		private_ts->irq_enabled = 0;
 	}
 
-	input_info(true, &ts->client->dev, "enable = %d\n", enable);
+	I("enable = %d\n", enable);
 	spin_unlock_irqrestore(&ts->irq_lock, irqflags);
 }
 EXPORT_SYMBOL(himax_int_enable);
@@ -879,40 +895,133 @@ int fb_notifier_callback(struct notifier_block *self,
 							unsigned long event, void *data)
 {
 	struct fb_event *evdata = data;
-	int *blank;
+	int *blank = NULL;
 	struct himax_ts_data *ts =
 	    container_of(self, struct himax_ts_data, fb_notif);
 
 	I(" %s\n", __func__);
 
-	if (evdata && evdata->data &&
-#ifdef HX_CONTAINER_SPEED_UP
-		event == FB_EARLY_EVENT_BLANK
-#else
-		event == FB_EVENT_BLANK
-#endif
-		&& ts != NULL &&
-	    ts->dev != NULL) {
-		blank = evdata->data;
+	if (evdata == NULL) {
+		I("%s %s evdata is null\n", HIMAX_LOG_TAG, __func__);
+		return 0;
+	}
 
-		switch (*blank) {
-		case FB_BLANK_UNBLANK:
-			#ifdef HX_CONTAINER_SPEED_UP
-				queue_delayed_work(ts->ts_int_workqueue, &ts->ts_int_work, msecs_to_jiffies(DELAY_TIME));
-			#else
-				himax_common_resume(ts->dev);
-			#endif
-			break;
+	blank = evdata->data;
 
-		case FB_BLANK_POWERDOWN:
-		case FB_BLANK_HSYNC_SUSPEND:
-		case FB_BLANK_VSYNC_SUSPEND:
-		case FB_BLANK_NORMAL:
+	if (evdata && evdata->data && ts != NULL && ts->dev != NULL) {
+		if (event == FB_EARLY_EVENT_BLANK &&
+			*blank == FB_BLANK_POWERDOWN) {
 			himax_common_suspend(ts->dev);
-			break;
+		} else if (event == FB_EVENT_BLANK &&
+				*blank == FB_BLANK_UNBLANK) {
+			himax_common_resume(ts->dev);
 		}
 	}
 
+	return 0;
+}
+#endif
+
+static int himax_reboot_notifier(struct notifier_block *this,
+		unsigned long code, void *unused)
+{
+	struct himax_ts_data *ts = container_of(this, struct himax_ts_data, reboot_notifier);
+
+	I("%s %s: enter\n", HIMAX_LOG_TAG, __func__);
+
+	himax_chip_common_suspend(ts);
+
+	I("%s %s: exit\n", HIMAX_LOG_TAG, __func__);
+
+	return NOTIFY_DONE;
+}
+
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER) || defined(CONFIG_MUIC_NOTIFIER)
+int otg_flag = 0;
+#endif
+
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+static int tsp_ccic_notification(struct notifier_block *nb,
+	   unsigned long action, void *data)
+{
+	CC_NOTI_USB_STATUS_TYPEDEF usb_status =
+	    *(CC_NOTI_USB_STATUS_TYPEDEF *) data;
+
+	switch (usb_status.drp) {
+	case USB_STATUS_NOTIFY_ATTACH_DFP:
+		otg_flag = 1;
+		I("%s : otg_flag 1\n", __func__);
+		break;
+	case USB_STATUS_NOTIFY_DETACH:
+		otg_flag = 0;
+		I("%s : otg_flag 0\n", __func__);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+#else
+#ifdef CONFIG_MUIC_NOTIFIER
+static int tsp_muic_notification(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
+
+	switch (action) {
+	case MUIC_NOTIFY_CMD_DETACH:
+	case MUIC_NOTIFY_CMD_LOGICALLY_DETACH:
+		otg_flag = 0;
+		I("%s : otg_flag 0\n", __func__);
+		break;
+	case MUIC_NOTIFY_CMD_ATTACH:
+	case MUIC_NOTIFY_CMD_LOGICALLY_ATTACH:
+		if (attached_dev == ATTACHED_DEV_OTG_MUIC) {
+			otg_flag = 1;
+			I("%s : otg_flag 1\n", __func__);
+		}
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+#endif
+#endif
+
+#ifdef CONFIG_VBUS_NOTIFIER
+static int tsp_vbus_notification(struct notifier_block *nb,
+		unsigned long cmd, void *data)
+{
+	vbus_status_t vbus_type = *(vbus_status_t *) data;
+
+	I("%s cmd=%lu, vbus_type=%d\n", __func__, cmd, vbus_type);
+
+	switch (vbus_type) {
+	case STATUS_VBUS_HIGH:
+		I("%s : attach\n", __func__);
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER) || defined(CONFIG_MUIC_NOTIFIER)
+		if (!otg_flag)
+#endif
+#if defined(HX_USB_DETECT_GLOBAL)
+		{
+			USB_detect_flag = true;
+			himax_cable_detect_func(false);
+		}
+#endif
+		break;
+	case STATUS_VBUS_LOW:
+		I("%s : detach\n", __func__);
+#if defined(HX_USB_DETECT_GLOBAL)
+		USB_detect_flag = false;
+		himax_cable_detect_func(false);
+#endif
+		break;
+	default:
+		break;
+	}
 	return 0;
 }
 #endif
@@ -922,7 +1031,8 @@ int himax_chip_common_probe(struct spi_device *spi)
 	struct himax_ts_data *ts;
 	int ret = 0;
 
-	I("Enter %s\n", __func__);
+	input_info(true, &spi->dev, "%s:Enter\n", __func__);
+	
 	if (spi->master->flags & SPI_MASTER_HALF_DUPLEX) {
 		dev_err(&spi->dev,
 				"%s: Full duplex not supported by host\n", __func__);
@@ -931,14 +1041,14 @@ int himax_chip_common_probe(struct spi_device *spi)
 
 	gBuffer = kzalloc(sizeof(uint8_t) * HX_MAX_WRITE_SZ, GFP_KERNEL);
 	if (gBuffer == NULL) {
-		E("%s: allocate gBuffer failed\n", __func__);
+		KE("%s: allocate gBuffer failed\n", __func__);
 		ret = -ENOMEM;
 		goto err_alloc_gbuffer_failed;
 	}
 
 	ts = kzalloc(sizeof(struct himax_ts_data), GFP_KERNEL);
 	if (ts == NULL) {
-		E("%s: allocate himax_ts_data failed\n", __func__);
+		KE("%s: allocate himax_ts_data failed\n", __func__);
 		ret = -ENOMEM;
 		goto err_alloc_data_failed;
 	}
@@ -958,6 +1068,24 @@ int himax_chip_common_probe(struct spi_device *spi)
 	ret = himax_chip_common_init();
 	if (ret < 0)
 		goto err_alloc_data_failed;
+
+	ts->reboot_notifier.notifier_call = himax_reboot_notifier;
+	register_reboot_notifier(&ts->reboot_notifier);
+		
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	manager_notifier_register(&ts->ccic_nb, tsp_ccic_notification,
+							MANAGER_NOTIFY_CCIC_USB);
+#else
+#ifdef CONFIG_MUIC_NOTIFIER
+	muic_notifier_register(&ts->muic_nb, tsp_muic_notification,
+							MUIC_NOTIFY_DEV_CHARGER);
+#endif
+#endif
+#ifdef CONFIG_VBUS_NOTIFIER
+	vbus_notifier_register(&ts->vbus_nb, tsp_vbus_notification,
+						VBUS_NOTIFY_DEV_CHARGER);
+#endif
+
 	return 0;
 
 err_alloc_data_failed:
@@ -1011,7 +1139,7 @@ static struct spi_driver himax_common_driver = {
 
 static int __init himax_common_init(void)
 {
-	I("Himax common touch panel driver init\n");
+	KI("Himax common touch panel driver init\n");
 	D("Himax check double loading\n");
 	if (g_mmi_refcnt++ > 0) {
 		I("Himax driver has been loaded! ignoring....\n");

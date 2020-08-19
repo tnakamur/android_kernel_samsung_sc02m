@@ -152,6 +152,7 @@ fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += tsp_stm/fts6ct108_view2.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS1BA90A) += tsp_stm/fts1ba90a_gta3_00.fw tsp_stm/fts1ba90a_gta3.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS449) += tsp_melfas/mms449_s5neo.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MMS438) += tsp_melfas/mms438_j7duo.fw
+fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MSS100_A30KOR) += tsp_melfas/mss100_a30.fw tsp_melfas/mss100_a30_old.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_MELFAS_MSS100) += tsp_melfas/mss100_m30_00.fw tsp_melfas/mss100_m30.fw tsp_melfas/mss100_m30_old.fw \
 													tsp_melfas/mss100_a30.fw tsp_melfas/mss100_a30_old.fw tsp_melfas/mss100_a30_jpn.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_MMS144) += tsp_melfas/DIABLO_CoreV54_V35_master.fw
@@ -195,6 +196,7 @@ fw-shipped-$(CONFIG_SENSORS_TC3XXK_A20) += coreriver/tc305k_a20_grip.fw
 fw-shipped-$(CONFIG_SENSORS_TC3XXK_A20E) += coreriver/tc305k_a20e_grip.fw
 fw-shipped-$(CONFIG_SENSORS_TC3XXK_A10) += coreriver/tc305k_a10_grip.fw coreriver/tc305k_a10_eur_kor.fw
 fw-shipped-$(CONFIG_SENSORS_TC3XXK_A10E) += coreriver/tc305k_a10e_grip.fw
+fw-shipped-$(CONFIG_SENSORS_TC3XXK_A10E_KOR) += coreriver/tc305k_a10e_kor.fw
 fw-shipped-$(CONFIG_SENSORS_A96T3X6) += abov/a96t346_a6elte.fw abov/a96t326_jackpotvelte.fw abov/a96t346_xcover4s.fw
 fw-shipped-$(CONFIG_SENSORS_A96T3X6_A40) += abov/a96t346_a405f.fw abov/a96t346_a405s.fw
 fw-shipped-$(CONFIG_SENSORS_A96T3X6_A30) += abov/a96t346_a305j.fw

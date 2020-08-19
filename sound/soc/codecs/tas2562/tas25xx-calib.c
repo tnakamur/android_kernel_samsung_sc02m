@@ -31,7 +31,7 @@
 #include <linux/semaphore.h>
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
-#include <dsp/smart_amp.h>
+#include <sound/smart_amp.h>
 
 /* Holds the Packet data required for processing */
 struct tas_dsp_pkt {
@@ -90,23 +90,8 @@ static int smartamp_params_ctrl(uint8_t *input, u8 dir, u8 count)
 		pr_err("[TI-SmartPA:%s] Wrong slaveid = %x\n", __func__, ppacket->slave_id);
 	}
 
-	/*
-	 * Note: In any case calculated paramid should not match with
-	 * AFE_PARAM_ID_ENABLE and AFE_PARAM_ID_SMARTAMP_DEFAULT
-	 */
-	if (paramid == CAPI_V2_TAS_TX_ENABLE ||
-		paramid == CAPI_V2_TAS_TX_CFG ||
-		paramid == CAPI_V2_TAS_RX_ENABLE ||
-		paramid == CAPI_V2_TAS_RX_CFG )
-	{
-		pr_err("[TI-SmartPA:%s] %s Slave 0x%x params failed, paramid mismatch\n", __func__, 
-				dir == TAS_GET_PARAM ? "get" : "set", ppacket->slave_id);
-		kfree(ppacket);
-		return -1;
-	}
-
 	ret = afe_smartamp_algo_ctrl(ppacket->data, paramid,
-			dir, length * 4, AFE_SMARTAMP_MODULE_RX);
+			dir, length * 4);
 	if (ret)
 		pr_err("[TI-SmartPA:%s] %s Slave 0x%x params failed from afe, ret=%x\n", __func__, 
 				dir == TAS_GET_PARAM ? "get" : "set", ppacket->slave_id, ret);

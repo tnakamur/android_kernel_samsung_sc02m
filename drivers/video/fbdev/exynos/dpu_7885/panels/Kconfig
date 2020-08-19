@@ -24,7 +24,7 @@ config EXYNOS_DECON_MDNIE
 
 config EXYNOS_DECON_MDNIE_LITE
 	depends on EXYNOS_DECON_MDNIE
-	tristate "Support backward compatibilit of MDNIE"
+	tristate "Support backward compatibility for MDNIE"
 	default y
 
 config SUPPORT_POC_FLASH

@@ -19,45 +19,45 @@
 static void hx83102_chip_init(void)
 {
 	(*kp_private_ts)->chip_cell_type = CHIP_IS_IN_CELL;
-	I("%s:IC cell type = %d\n", __func__, (*kp_private_ts)->chip_cell_type);
+	KI("%s:IC cell type = %d\n", __func__, (*kp_private_ts)->chip_cell_type);
 	(*kp_IC_CHECKSUM)	=	HX_TP_BIN_CHECKSUM_CRC;
 	/*Himax: Set FW and CFG Flash Address*/
-	(*kp_FW_VER_MAJ_FLASH_ADDR)   = 49157;  /*0x00C005*/
-	(*kp_FW_VER_MAJ_FLASH_LENG)   = 1;
-	(*kp_FW_VER_MIN_FLASH_ADDR)   = 49158;  /*0x00C006*/
-	(*kp_FW_VER_MIN_FLASH_LENG)   = 1;
-	(*kp_CFG_VER_MAJ_FLASH_ADDR)	= 49408;  /*0x00C100*/
-	(*kp_CFG_VER_MAJ_FLASH_LENG)	= 1;
-	(*kp_CFG_VER_MIN_FLASH_ADDR)	= 49409;  /*0x00C101*/
-	(*kp_CFG_VER_MIN_FLASH_LENG)	= 1;
 	(*kp_CID_VER_MAJ_FLASH_ADDR)	= 49154;  /*0x00C002*/
 	(*kp_CID_VER_MAJ_FLASH_LENG)	= 1;
 	(*kp_CID_VER_MIN_FLASH_ADDR)	= 49155;  /*0x00C003*/
 	(*kp_CID_VER_MIN_FLASH_LENG)	= 1;
-	/*PANEL_VERSION_ADDR		= 49156;*/  /*0x00C004*/
-	/*PANEL_VERSION_LENG		= 1;*/
+	(*kp_PANEL_VERSION_ADDR)		= 49156;  /*0x00C004*/
+	(*kp_PANEL_VERSION_LENG)		= 1;
+	(*kp_FW_VER_MAJ_FLASH_ADDR)		= 49157;  /*0x00C005*/
+	(*kp_FW_VER_MAJ_FLASH_LENG)		= 1;
+	(*kp_FW_VER_MIN_FLASH_ADDR)		= 49158;  /*0x00C006*/
+	(*kp_FW_VER_MIN_FLASH_LENG)		= 1;
+	(*kp_CFG_VER_MAJ_FLASH_ADDR)	= 49408;  /*0x00C100*/
+	(*kp_CFG_VER_MAJ_FLASH_LENG)	= 1;
+	(*kp_CFG_VER_MIN_FLASH_ADDR)	= 49409;  /*0x00C101*/
+	(*kp_CFG_VER_MIN_FLASH_LENG)	= 1;
 }
 
 static void hx83102e_chip_init(void)
 {
 	(*kp_private_ts)->chip_cell_type = CHIP_IS_IN_CELL;
-	I("%s:IC cell type = %d\n", __func__, (*kp_private_ts)->chip_cell_type);
+	KI("%s:IC cell type = %d\n", __func__, (*kp_private_ts)->chip_cell_type);
 	(*kp_IC_CHECKSUM)	=	HX_TP_BIN_CHECKSUM_CRC;
 	/*Himax: Set FW and CFG Flash Address*/
-	(*kp_FW_VER_MAJ_FLASH_ADDR)   = 57349;  /*0x00C005*/
-	(*kp_FW_VER_MAJ_FLASH_LENG)   = 1;
-	(*kp_FW_VER_MIN_FLASH_ADDR)   = 57350;  /*0x00C006*/
-	(*kp_FW_VER_MIN_FLASH_LENG)   = 1;
-	(*kp_CFG_VER_MAJ_FLASH_ADDR)	= 57600;  /*0x00C100*/
-	(*kp_CFG_VER_MAJ_FLASH_LENG)	= 1;
-	(*kp_CFG_VER_MIN_FLASH_ADDR)	= 57601;  /*0x00C101*/
-	(*kp_CFG_VER_MIN_FLASH_LENG)	= 1;
-	(*kp_CID_VER_MAJ_FLASH_ADDR)	= 57346;  /*0x00C002*/
+	(*kp_CID_VER_MAJ_FLASH_ADDR)	= 59394;  /*0x00E802*/
 	(*kp_CID_VER_MAJ_FLASH_LENG)	= 1;
-	(*kp_CID_VER_MIN_FLASH_ADDR)	= 57347;  /*0x00C003*/
+	(*kp_CID_VER_MIN_FLASH_ADDR)	= 59395;  /*0x00E803*/
 	(*kp_CID_VER_MIN_FLASH_LENG)	= 1;
-	/*PANEL_VERSION_ADDR		= 49156;*/  /*0x00C004*/
-	/*PANEL_VERSION_LENG		= 1;*/
+	(*kp_PANEL_VERSION_ADDR)		= 59396;  /*0x00E804*/
+	(*kp_PANEL_VERSION_LENG)		= 1;
+	(*kp_FW_VER_MAJ_FLASH_ADDR)		= 59397;  /*0x00E805*/
+	(*kp_FW_VER_MAJ_FLASH_LENG)		= 1;
+	(*kp_FW_VER_MIN_FLASH_ADDR)		= 59398;  /*0x00E806*/
+	(*kp_FW_VER_MIN_FLASH_LENG)		= 1;
+	(*kp_CFG_VER_MAJ_FLASH_ADDR)	= 59648;  /*0x00E900*/
+	(*kp_CFG_VER_MAJ_FLASH_LENG)	= 1;
+	(*kp_CFG_VER_MIN_FLASH_ADDR)	= 59649;  /*0x00E901*/
+	(*kp_CFG_VER_MIN_FLASH_LENG)	= 1;
 }
 
 void hx83102_burst_enable(uint8_t auto_add_4_byte)
@@ -138,7 +138,7 @@ static int hx83102_register_read(uint8_t *read_addr, int read_length, uint8_t *r
 #ifdef HX_RST_PIN_FUNC
 static void hx83102_pin_reset(void)
 {
-	I("%s: Now reset the Touch chip.\n", __func__);
+	KI("%s: Now reset the Touch chip.\n", __func__);
 	kp_himax_rst_gpio_set((*kp_private_ts)->rst_gpio, 0);
 	msleep(20);
 	kp_himax_rst_gpio_set((*kp_private_ts)->rst_gpio, 1);
@@ -166,13 +166,13 @@ static bool hx83102_sense_off(bool check_en)
 		hx83102_register_read(tmp_addr, DATA_LEN_4, tmp_data);
 
 		if (tmp_data[0] != 0x05) {
-			I("%s: Do not need wait FW, Status = 0x%02X!\n", __func__, tmp_data[0]);
+			KI("%s: Do not need wait FW, Status = 0x%02X!\n", __func__, tmp_data[0]);
 			break;
 		}
 
 		tmp_addr[3] = 0x90; tmp_addr[2] = 0x00; tmp_addr[1] = 0x00; tmp_addr[0] = 0x5C;
 		hx83102_register_read(tmp_addr, DATA_LEN_4, tmp_data);
-		I("%s: cnt = %d, data[0] = 0x%02X!\n", __func__, cnt, tmp_data[0]);
+		KI("%s: cnt = %d, data[0] = 0x%02X!\n", __func__, cnt, tmp_data[0]);
 	} while (tmp_data[0] != 0x87 && (++cnt < 50) && check_en == true);
 
 	cnt = 0;
@@ -205,7 +205,7 @@ static bool hx83102_sense_off(bool check_en)
 		 */
 		tmp_addr[3] = 0x90; tmp_addr[2] = 0x00; tmp_addr[1] = 0x00; tmp_addr[0] = 0xA8;
 		hx83102_register_read(tmp_addr, ADDR_LEN_4, tmp_data);
-		I("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
+		KI("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
 
 		if (tmp_data[0] == 0x0C) {
 			/*=====================================
@@ -283,7 +283,7 @@ static bool hx83102ab_sense_off(bool check_en)
 		 */
 		tmp_addr[3] = 0x90; tmp_addr[2] = 0x00; tmp_addr[1] = 0x00; tmp_addr[0] = 0xA8;
 		hx83102_register_read(tmp_addr, ADDR_LEN_4, tmp_data);
-		I("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
+		KI("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
 
 		if (tmp_data[0] == 0x0C) {
 			/*=====================================
@@ -352,7 +352,7 @@ static void hx83102ab_set_SMWP_enable(uint8_t SMWP_enable, bool suspended)
 		}
 
 		kp_g_core_fp->fp_register_read((*kp_pfw_op)->addr_smwp_enable, DATA_LEN_4, tmp_data, false);
-		/*I("%s: tmp_data[0]=%d, SMWP_enable=%d, retry_cnt=%d\n", __func__, tmp_data[0],SMWP_enable,retry_cnt);*/
+		/*KI("%s: tmp_data[0]=%d, SMWP_enable=%d, retry_cnt=%d\n", __func__, tmp_data[0],SMWP_enable,retry_cnt);*/
 		retry_cnt++;
 	} while ((tmp_data[3] != back_data[3] || tmp_data[2] != back_data[2] || tmp_data[1] != back_data[1]  || tmp_data[0] != back_data[0]) && retry_cnt < HIMAX_REG_RETRY_TIMES);
 
@@ -371,7 +371,7 @@ static void hx83102ab_set_HSEN_enable(uint8_t HSEN_enable, bool suspended)
 		kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_hsen_enable, DATA_LEN_4, tmp_data, 0);
 	}
 
-	/*I("%s: tmp_data[0]=%d, HSEN_enable=%d, retry_cnt=%d\n", __func__, tmp_data[0],HSEN_enable,retry_cnt);*/
+	/*KI("%s: tmp_data[0]=%d, HSEN_enable=%d, retry_cnt=%d\n", __func__, tmp_data[0],HSEN_enable,retry_cnt);*/
 }
 
 static void hx83102ab_usb_detect_set(uint8_t *cable_config)
@@ -381,11 +381,11 @@ static void hx83102ab_usb_detect_set(uint8_t *cable_config)
 	if (cable_config[1] == 0x01) {
 		kp_himax_in_parse_assign_cmd(fw_func_handshaking_pwd, tmp_data, 4);
 		kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_usb_detect, DATA_LEN_4, tmp_data, 0);
-		I("%s: USB detect status IN!\n", __func__);
+		KI("%s: USB detect status IN!\n", __func__);
 	} else {
 		kp_himax_in_parse_assign_cmd(fw_data_safe_mode_release_pw_reset, tmp_data, 4);
 		kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_usb_detect, DATA_LEN_4, tmp_data, 0);
-		I("%s: USB detect status OUT!\n", __func__);
+		KI("%s: USB detect status OUT!\n", __func__);
 	}
 }
 
@@ -397,7 +397,7 @@ static uint8_t hx83102ab_read_DD_status(uint8_t *cmd_set, uint8_t *tmp_data)
 	cmd_set[3] = (*kp_pfw_op)->data_dd_request[0];
 
 	kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_dd_handshak_addr, DATA_LEN_4, cmd_set, 0);
-	I("%s: cmd_set[0] = 0x%02X,cmd_set[1] = 0x%02X,cmd_set[2] = 0x%02X,cmd_set[3] = 0x%02X\n",
+	KI("%s: cmd_set[0] = 0x%02X,cmd_set[1] = 0x%02X,cmd_set[2] = 0x%02X,cmd_set[3] = 0x%02X\n",
 	  __func__, cmd_set[0], cmd_set[1], cmd_set[2], cmd_set[3]);
 
 	/* Doing hand shaking 0xAA -> 0xBB */
@@ -406,11 +406,11 @@ static uint8_t hx83102ab_read_DD_status(uint8_t *cmd_set, uint8_t *tmp_data)
 		usleep_range(10000, 10001);
 
 		if (tmp_data[3] == (*kp_pfw_op)->data_dd_ack[0]) {
-			I("%s Data ready goto moving data\n", __func__);
+			KI("%s Data ready goto moving data\n", __func__);
 			break;
 		}
 		if (cnt >= 99) {
-			I("%s Data not ready in FW\n", __func__);
+			KI("%s Data not ready in FW\n", __func__);
 			return FW_NOT_READY;
 		}
 	}
@@ -461,7 +461,7 @@ static void hx83102ab_power_on_init(void)
 {
 	uint8_t tmp_data[DATA_LEN_4];
 
-	I("%s:\n", __func__);
+	KI("%s:\n", __func__);
 	kp_himax_in_parse_assign_cmd(fw_data_safe_mode_release_pw_reset, tmp_data, 4);
 	kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_raw_out_sel, DATA_LEN_4, tmp_data, 0);
 	kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_sorting_mode_en, DATA_LEN_4, tmp_data, 0);
@@ -512,7 +512,7 @@ static void hx83102ab_esd_ic_reset(void)
 #else
 	kp_g_core_fp->fp_system_reset();
 #endif
-	I("%s:\n", __func__);
+	KI("%s:\n", __func__);
 }
 #if defined(HX_ZERO_FLASH)
 static int hx83102d_0f_esd_check(void)
@@ -520,20 +520,20 @@ static int hx83102d_0f_esd_check(void)
 	uint8_t tmp_data[DATA_LEN_4];
 	int ret = NO_ERR;
 
-	I("Enter %s\n", __func__);
+	KI("Enter %s\n", __func__);
 
 	kp_g_core_fp->fp_register_read((*kp_pzf_op)->addr_sts_chk, DATA_LEN_4, tmp_data, 0);
 
 	if (tmp_data[0] != (*kp_pzf_op)->data_activ_sts[0]) {
 		ret = ERR_STS_WRONG;
-		I("%s:status : %8X = %2X\n", __func__, zf_addr_sts_chk, tmp_data[0]);
+		KI("%s:status : %8X = %2X\n", __func__, zf_addr_sts_chk, tmp_data[0]);
 	}
 
 	kp_g_core_fp->fp_register_read((*kp_pzf_op)->addr_activ_relod, DATA_LEN_4, tmp_data, 0);
 
 	if (tmp_data[0] != (*kp_pzf_op)->data_activ_in[0]) {
 		ret = ERR_STS_WRONG;
-		I("%s:status : %8X = %2X\n", __func__, zf_addr_activ_relod, tmp_data[0]);
+		KI("%s:status : %8X = %2X\n", __func__, zf_addr_activ_relod, tmp_data[0]);
 	}
 
 	return ret;
@@ -557,12 +557,12 @@ static bool hx83102d_sense_off(bool check_en)
 		kp_g_core_fp->fp_register_read((*kp_pic_op)->addr_cs_central_state, ADDR_LEN_4, tmp_data, 0);
 
 		if (tmp_data[0] != 0x05) {
-			I("%s: Do not need wait FW, Status = 0x%02X!\n", __func__, tmp_data[0]);
+			KI("%s: Do not need wait FW, Status = 0x%02X!\n", __func__, tmp_data[0]);
 			break;
 		}
 
 		kp_g_core_fp->fp_register_read((*kp_pfw_op)->addr_ctrl_fw_isr, 4, tmp_data, false);
-		I("%s: cnt = %d, data[0] = 0x%02X!\n", __func__, cnt, tmp_data[0]);
+		KI("%s: cnt = %d, data[0] = 0x%02X!\n", __func__, cnt, tmp_data[0]);
 	} while (tmp_data[0] != 0x87 && (++cnt < 10) && check_en == true);
 
 	cnt = 0;
@@ -594,7 +594,7 @@ static bool hx83102d_sense_off(bool check_en)
 		 */
 		tmp_addr[3] = 0x90; tmp_addr[2] = 0x00; tmp_addr[1] = 0x00; tmp_addr[0] = 0xA8;
 		hx83102_register_read(tmp_addr, ADDR_LEN_4, tmp_data);
-		I("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
+		KI("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
 
 		if (tmp_data[0] == 0x0C) {
 			/*=====================================
@@ -641,6 +641,30 @@ static bool hx83102d_sense_off(bool check_en)
 	return false;
 }
 
+static void hx83102e_sense_on(uint8_t FlashMode)
+{
+	uint8_t tmp_data[DATA_LEN_4] = {0};
+
+	I("Enter %s\n", __func__);
+	kp_g_core_fp->fp_interface_on();
+	kp_g_core_fp->fp_register_write(pfw_op->addr_ctrl_fw_isr,
+		sizeof(pfw_op->data_clear), pfw_op->data_clear, 0);
+	/*msleep(20);*/
+	usleep_range(10000, 11000);
+	if (!FlashMode) {
+#ifdef HX_RST_PIN_FUNC
+		kp_g_core_fp->fp_ic_reset(false, false);
+#else
+		kp_g_core_fp->fp_system_reset();
+#endif
+	} else {
+		if (kp_himax_bus_write(pic_op->adr_i2c_psw_lb[0], tmp_data, 1, HIMAX_I2C_RETRY_TIMES) < 0)
+			E("%s: i2c access fail!\n", __func__);
+
+		if (kp_himax_bus_write(pic_op->adr_i2c_psw_ub[0], tmp_data, 1, HIMAX_I2C_RETRY_TIMES) < 0)
+			E("%s: i2c access fail!\n", __func__);
+	}
+}
 
 static bool hx83102e_sense_off(bool check_en)
 {
@@ -658,36 +682,17 @@ static bool hx83102e_sense_off(bool check_en)
 		kp_g_core_fp->fp_register_read((*kp_pic_op)->addr_cs_central_state, ADDR_LEN_4, tmp_data, 0);
 
 		if (tmp_data[0] != 0x05) {
-			I("%s: Do not need wait FW, Status = 0x%02X!\n", __func__, tmp_data[0]);
+			KI("%s: Do not need wait FW, Status = 0x%02X!\n", __func__, tmp_data[0]);
 			break;
 		}
 
 		kp_g_core_fp->fp_register_read((*kp_pfw_op)->addr_ctrl_fw_isr, 4, tmp_data, false);
-		I("%s: cnt = %d, data[0] = 0x%02X!\n", __func__, cnt, tmp_data[0]);
+		KI("%s: cnt = %d, data[0] = 0x%02X!\n", __func__, cnt, tmp_data[0]);
 	} while (tmp_data[0] != 0x87 && (++cnt < 10) && check_en == true);
 
 	cnt = 0;
 
 	do {
-		/*===========================================
-		 *I2C_password[7:0] set Enter safe mode : 0x31 ==> 0x27
-		 *===========================================
-		 */
-		tmp_data[0] = 0x27;
-		if (kp_himax_bus_write(0x31, tmp_data, 1, HIMAX_I2C_RETRY_TIMES) < 0) {
-			E("%s: i2c access fail!\n", __func__);
-			return false;
-		}
-
-		/*===========================================
-		 *I2C_password[15:8] set Enter safe mode :0x32 ==> 0x95
-		 *===========================================
-		 */
-		tmp_data[0] = 0x95;
-		if (kp_himax_bus_write(0x32, tmp_data, 1, HIMAX_I2C_RETRY_TIMES) < 0) {
-			E("%s: i2c access fail!\n", __func__);
-			return false;
-		}
 		/*===========================================
 		 *I2C_password[7:0] set Enter safe mode : 0x31 ==> 0x27
 		 *===========================================
@@ -714,7 +719,7 @@ static bool hx83102e_sense_off(bool check_en)
 		 */
 		tmp_addr[3] = 0x90; tmp_addr[2] = 0x00; tmp_addr[1] = 0x00; tmp_addr[0] = 0xA8;
 		hx83102_register_read(tmp_addr, ADDR_LEN_4, tmp_data);
-		I("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
+		KI("%s: Check enter_save_mode data[0]=%X\n", __func__, tmp_data[0]);
 
 		if (tmp_data[0] == 0x0C) {
 			/*=====================================
@@ -778,7 +783,7 @@ static bool hx83102d_ic_id_read(void)
 		kp_g_core_fp->fp_dd_reg_write(0xBB, 1, 1, data, 0);
 		kp_g_core_fp->fp_dd_reg_read(0xBB, 6, 1, data, 0);
 		(*kp_ic_data)->vendor_ic_id[i] = data[0];
-		I("ic_data->vendor_ic_id[%d] = %02X\n", i, (*kp_ic_data)->vendor_ic_id[i]);
+		KI("ic_data->vendor_ic_id[%d] = %02X\n", i, (*kp_ic_data)->vendor_ic_id[i]);
 	}
 
 	kp_g_core_fp->fp_dd_clk_set(false);
@@ -806,7 +811,7 @@ static void himax_hx83102d_reload_to_active(void)
 		kp_g_core_fp->fp_register_write(addr, DATA_LEN_4, data, 0);
 		usleep_range(1000, 1100);
 		kp_g_core_fp->fp_register_read(addr, DATA_LEN_4, data, 0);
-		I("%s: data[1]=%d, data[0]=%d, retry_cnt=%d\n", __func__, data[1], data[0], retry_cnt);
+		KI("%s: data[1]=%d, data[0]=%d, retry_cnt=%d\n", __func__, data[1], data[0], retry_cnt);
 		retry_cnt++;
 	} while ((data[1] != 0x01 || data[0] != 0xEC) && retry_cnt < HIMAX_REG_RETRY_TIMES);
 }
@@ -830,7 +835,7 @@ static void himax_hx83102d_sense_on(uint8_t FlashMode)
 	uint8_t tmp_data[DATA_LEN_4];
 	int retry = 0;
 
-	I("Enter %s\n", __func__);
+	KI("Enter %s\n", __func__);
 
 	kp_g_core_fp->fp_interface_on();
 	kp_g_core_fp->fp_register_write((*kp_pfw_op)->addr_ctrl_fw_isr,
@@ -851,7 +856,7 @@ static void himax_hx83102d_sense_on(uint8_t FlashMode)
 				sizeof((*kp_pfw_op)->data_safe_mode_release_pw_active), (*kp_pfw_op)->data_safe_mode_release_pw_active, 0);
 
 			kp_g_core_fp->fp_register_read((*kp_pfw_op)->addr_flag_reset_event, DATA_LEN_4, tmp_data, 0);
-			I("%s:Read status from IC = %X,%X\n", __func__, tmp_data[0], tmp_data[1]);
+			KI("%s:Read status from IC = %X,%X\n", __func__, tmp_data[0], tmp_data[1]);
 		} while ((tmp_data[1] != 0x01 || tmp_data[0] != 0x00) && retry++ < 5);
 
 		if (retry >= 5) {
@@ -863,7 +868,7 @@ static void himax_hx83102d_sense_on(uint8_t FlashMode)
 #endif
 			himax_hx83102d_reload_to_active();
 		} else {
-			I("%s:OK and Read status from IC = %X,%X\n", __func__, tmp_data[0], tmp_data[1]);
+			KI("%s:OK and Read status from IC = %X,%X\n", __func__, tmp_data[0], tmp_data[1]);
 			/* reset code*/
 			tmp_data[0] = 0x00;
 
@@ -883,7 +888,7 @@ static void hx83102ab_firmware_update_0f(const struct firmware *fw_entry)
 {
 	uint8_t tmp_addr[4];
 
-	I("%s, Entering\n", __func__);
+	KI("%s, Entering\n", __func__);
 
 	kp_g_core_fp->fp_register_write((*kp_pzf_op)->addr_system_reset,  4,  (*kp_pzf_op)->data_system_reset, 0);
 
@@ -925,14 +930,14 @@ static void hx83102ab_firmware_update_0f(const struct firmware *fw_entry)
 	else
 		kp_g_core_fp->fp_clean_sram_0f((*kp_pzf_op)->data_adc_cfg_1, (128 * 4), 2);
 
-	I("%s, END\n", __func__);
+	KI("%s, END\n", __func__);
 }
 #if defined(HX_0F_DEBUG)
 static void hx83102ab_firmware_read_0f(const struct firmware *fw_entry, int type)
 {
 	uint8_t tmp_addr[4];
 
-	I("%s, Entering\n", __func__);
+	KI("%s, Entering\n", __func__);
 	if (type == 0) { /* first 32K */
 		kp_g_core_fp->fp_read_sram_0f(fw_entry, (*kp_pzf_op)->data_sram_start_addr, 0, HX_32K_SZ);
 		tmp_addr[3] = 0x10;
@@ -958,13 +963,13 @@ static void hx83102ab_firmware_read_0f(const struct firmware *fw_entry, int type
 		kp_g_core_fp->fp_read_sram_0f(fw_entry, (*kp_pzf_op)->data_adc_cfg_1, 0xE000, (128*4));
 
 	}
-	I("%s, END\n", __func__);
+	KI("%s, END\n", __func__);
 }
 static void hx83102d_firmware_read_0f(const struct firmware *fw_entry, int type)
 {
 	uint8_t tmp_data[4];
 
-	I("%s, Entering\n", __func__);
+	KI("%s, Entering\n", __func__);
 
 	switch (type) {
 	case 0:
@@ -1004,7 +1009,7 @@ static void hx83102d_firmware_read_0f(const struct firmware *fw_entry, int type)
 	default:
 		break;
 	}
-	I("%s, END\n", __func__);
+	KI("%s, END\n", __func__);
 }
 #endif
 #if defined(HX_CODE_OVERLAY)
@@ -1051,7 +1056,7 @@ static int hx83102d_0f_overlay(int ovl_type, int mode)
 
 			zf_info_arr[j].write_size = buf[7] << 24 | buf[6] << 16 | buf[5] << 8 | buf[4];
 			zf_info_arr[j].fw_addr = buf[11] << 24 | buf[10] << 16 | buf[9] << 8 | buf[8];
-			/*I("j = %d; write_size = %d; fw_addr = %d\n", j, zf_info_arr[j].write_size, zf_info_arr[j].fw_addr);*/
+			/*KI("j = %d; write_size = %d; fw_addr = %d\n", j, zf_info_arr[j].write_size, zf_info_arr[j].fw_addr);*/
 			j++;
 		}
 	}
@@ -1066,7 +1071,7 @@ static int hx83102d_0f_overlay(int ovl_type, int mode)
  *			send_data[0] = 0x00;
  *			offset = zf_info_arr[2].fw_addr;
  *			size = zf_info_arr[2].write_size;
- *			I("%s: self test overlay section 2\n", __func__);
+ *			KI("%s: self test overlay section 2\n", __func__);
  *		} else if (mode == 1) {
  *			//sorting overlay when call self_test
  *			send_data[3] = 0x00;
@@ -1075,7 +1080,7 @@ static int hx83102d_0f_overlay(int ovl_type, int mode)
  *			send_data[0] = 0x80;
  *			offset = zf_info_arr[0].fw_addr;
  *			size = zf_info_arr[0].write_size;
- *			I("%s: self test overlay section 0\n", __func__);
+ *			KI("%s: self test overlay section 0\n", __func__);
  *		}
  *	}
  */
@@ -1085,14 +1090,14 @@ static int hx83102d_0f_overlay(int ovl_type, int mode)
 		reply = ovl_gesture_reply;
 		offset = zf_info_arr[1].fw_addr;
 		size = zf_info_arr[1].write_size;
-		I("%s: overlay section 1\n", __func__);
+		KI("%s: overlay section 1\n", __func__);
 	} else if (ovl_type == 3) {
 		/*border overlay when resume*/
 		request = ovl_border_request;
 		reply = ovl_border_reply;
 		offset = zf_info_arr[2].fw_addr;
 		size = zf_info_arr[2].write_size;
-		I("%s: overlay section 2\n", __func__);
+		KI("%s: overlay section 2\n", __func__);
 	} else {
 		return HX_INIT_FAIL;
 	}
@@ -1109,7 +1114,7 @@ static int hx83102d_0f_overlay(int ovl_type, int mode)
  *			g_core_fp.fp_register_read(mpap_addr, DATA_LEN_4, recv_data, 0);
  *		} while ((recv_data[0] != send_data[0] || recv_data[1] != send_data[1] || recv_data[2] != send_data[2] || recv_data[3] != send_data[3]) && count++ < 10);
  *
- *		I("%s: set mpap pw %d times\n", __func__, count);
+ *		KI("%s: set mpap pw %d times\n", __func__, count);
  *
  *		//g_core_fp.fp_write_sram_0f(fwp, sram_addr, offset, size);
  *		if (kp_g_core_fp->fp_write_sram_0f_crc(fwp, sram_addr, offset, size) != 0)
@@ -1153,7 +1158,7 @@ static int hx83102d_0f_overlay(int ovl_type, int mode)
 		}
 	}
 
-	I("%s: overlay request %d times; reply %d times\n", __func__, count, count2);
+	KI("%s: overlay request %d times; reply %d times\n", __func__, count, count2);
 
 	release_firmware(fwp);
 
@@ -1193,10 +1198,10 @@ static void hx83102a_read_ic_ver(void)
 	/* Read DD data */
 	kp_himax_in_parse_assign_cmd(hx83102_ic_fw, tmp_addr, sizeof(tmp_addr));
 	kp_g_core_fp->fp_register_read(tmp_addr, DATA_LEN_4, tmp_data, 0);
-	I("E8=%X\n", tmp_data[0]);
+	KI("E8=%X\n", tmp_data[0]);
 	(*kp_ic_data)->vendor_ic_ver = tmp_data[0];
 
-	I("VENDOR_IC_VER : %X\n", ((*kp_ic_data)->vendor_ic_ver));
+	KI("VENDOR_IC_VER : %X\n", ((*kp_ic_data)->vendor_ic_ver));
 }
 
 static void hx83102b_read_ic_ver(void)
@@ -1221,7 +1226,7 @@ static void hx83102b_read_ic_ver(void)
 	/* Read DD data */
 	kp_himax_in_parse_assign_cmd(hx83102_ic_fw, tmp_addr, sizeof(tmp_addr));
 	kp_g_core_fp->fp_register_read(tmp_addr, DATA_LEN_4, tmp_data, 0);
-	I("E8=%X\n", tmp_data[0]);
+	KI("E8=%X\n", tmp_data[0]);
 	(*kp_ic_data)->vendor_ic_ver = tmp_data[0];
 
 	/* Disable read DD */
@@ -1230,7 +1235,7 @@ static void hx83102b_read_ic_ver(void)
 	tmp_data[0] = 0x00;
 	kp_g_core_fp->fp_register_write(tmp_addr, DATA_LEN_4, tmp_data, false);
 
-	I("VENDOR_IC_VER : %X\n", ((*kp_ic_data)->vendor_ic_ver));
+	KI("VENDOR_IC_VER : %X\n", ((*kp_ic_data)->vendor_ic_ver));
 }
 
 static void hx83102d_read_ic_ver(void)
@@ -1260,7 +1265,7 @@ static void hx83102d_read_ic_ver(void)
 	/* Read DD data */
 	kp_himax_in_parse_assign_cmd(hx83102_ic_fw, tmp_addr, sizeof(tmp_addr));
 	kp_g_core_fp->fp_register_read(tmp_addr, DATA_LEN_4, tmp_data, 0);
-	I("E8=%X\n", tmp_data[0]);
+	KI("E8=%X\n", tmp_data[0]);
 	(*kp_ic_data)->vendor_ic_ver = tmp_data[0];
 
 	/* Disable read DD */
@@ -1269,7 +1274,7 @@ static void hx83102d_read_ic_ver(void)
 	tmp_data[0] = 0x00;
 	kp_g_core_fp->fp_register_write(tmp_addr, DATA_LEN_4, tmp_data, false);
 
-	I("VENDOR_IC_VER : %X\n", ((*kp_ic_data)->vendor_ic_ver));
+	KI("VENDOR_IC_VER : %X\n", ((*kp_ic_data)->vendor_ic_ver));
 }
 
 static void hx83102_dynamic_fw_name(uint8_t ic_name)
@@ -1300,7 +1305,7 @@ static void hx83102_dynamic_fw_name(uint8_t ic_name)
 	(*kp_i_CTPM_firmware_name) = kzalloc((sizeof(char)*(strlen(firmware_name)+1)), GFP_KERNEL);
 	if ((*kp_i_CTPM_firmware_name) != NULL)
 		memcpy((*kp_i_CTPM_firmware_name), firmware_name, (sizeof(char)*(strlen(firmware_name)+1)));
-	I("(*kp_i_CTPM_firmware_name) : %s\n", (*kp_i_CTPM_firmware_name));
+	KI("(*kp_i_CTPM_firmware_name) : %s\n", (*kp_i_CTPM_firmware_name));
 }
 #endif
 #endif
@@ -1327,7 +1332,7 @@ static bool hx83102e_read_event_stack(uint8_t *buf, uint8_t length)
 
 static void himax_hx83102ab_reg_re_init(uint8_t ic_name)
 {
-	I("%s:Entering!\n", __func__);
+	KI("%s:Entering!\n", __func__);
 	kp_himax_in_parse_assign_cmd(hx83102ab_fw_addr_sorting_mode_en, (*kp_pfw_op)->addr_sorting_mode_en, sizeof((*kp_pfw_op)->addr_sorting_mode_en));
 	kp_himax_in_parse_assign_cmd(hx83102ab_fw_addr_selftest_addr_en, (*kp_pfw_op)->addr_selftest_addr_en, sizeof((*kp_pfw_op)->addr_selftest_addr_en));
 #ifdef HX_ZERO_FLASH
@@ -1347,7 +1352,7 @@ static void himax_hx83102ab_reg_re_init(uint8_t ic_name)
 
 static void himax_hx83102ab_func_re_init(void)
 {
-	I("%s:Entering!\n", __func__);
+	KI("%s:Entering!\n", __func__);
 	kp_g_core_fp->fp_chip_init = hx83102_chip_init;
 	kp_g_core_fp->fp_sense_off = hx83102ab_sense_off;
 	kp_g_core_fp->fp_set_SMWP_enable = hx83102ab_set_SMWP_enable;
@@ -1371,7 +1376,7 @@ static void himax_hx83102ab_func_re_init(void)
 
 static void himax_hx83102d_reg_re_init(void)
 {
-	I("%s:Entering!\n", __func__);
+	KI("%s:Entering!\n", __func__);
 	kp_himax_in_parse_assign_cmd(hx83102d_fw_addr_raw_out_sel, (*kp_pfw_op)->addr_raw_out_sel, sizeof((*kp_pfw_op)->addr_raw_out_sel));
 #if defined(HX_ZERO_FLASH)
 	kp_himax_in_parse_assign_cmd(hx83102d_zf_data_sram_start_addr, (*kp_pzf_op)->data_sram_start_addr, sizeof((*kp_pzf_op)->data_sram_start_addr));
@@ -1388,7 +1393,7 @@ static void himax_hx83102d_reg_re_init(void)
 
 static void himax_hx83102d_func_re_init(void)
 {
-	I("%s:Entering!\n", __func__);
+	KI("%s:Entering!\n", __func__);
 	kp_g_core_fp->fp_chip_init = hx83102_chip_init;
 	kp_g_core_fp->fp_sense_off = hx83102d_sense_off;
 	kp_g_core_fp->fp_ic_id_read = hx83102d_ic_id_read;
@@ -1414,7 +1419,7 @@ static void himax_hx83102d_func_re_init(void)
 
 static void himax_hx83102e_reg_re_init(void)
 {
-	I("%s:Entering!\n", __func__);
+	KI("%s:Entering!\n", __func__);
 	kp_himax_in_parse_assign_cmd(hx83102e_fw_addr_raw_out_sel, (*kp_pfw_op)->addr_raw_out_sel, sizeof((*kp_pfw_op)->addr_raw_out_sel));
 	kp_himax_in_parse_assign_cmd(hx83102e_data_df_rx, (*kp_pdriver_op)->data_df_rx, sizeof((*kp_pdriver_op)->data_df_rx));
 	kp_himax_in_parse_assign_cmd(hx83102e_data_df_tx, (*kp_pdriver_op)->data_df_tx, sizeof((*kp_pdriver_op)->data_df_tx));
@@ -1425,9 +1430,10 @@ static void himax_hx83102e_reg_re_init(void)
 
 static void himax_hx83102e_func_re_init(void)
 {
-	I("%s:Entering!\n", __func__);
+	KI("%s:Entering!\n", __func__);
 
 	kp_g_core_fp->fp_chip_init = hx83102e_chip_init;
+	kp_g_core_fp->fp_sense_on = hx83102e_sense_on;
 	kp_g_core_fp->fp_sense_off = hx83102e_sense_off;
 	kp_g_core_fp->fp_read_event_stack = hx83102e_read_event_stack;
 }
@@ -1468,21 +1474,21 @@ static bool hx83102_chip_detect(void)
 			E("%s:hx83102_register_read Fail:\n", __func__);
 			return ret_data;
 		}
-		I("%s:Read driver IC ID = %X,%X,%X\n", __func__, tmp_data[3], tmp_data[2], tmp_data[1]); /*83,10,2X*/
+		KI("%s:Read driver IC ID = %X,%X,%X\n", __func__, tmp_data[3], tmp_data[2], tmp_data[1]); /*83,10,2X*/
 
 		if ((tmp_data[3] == 0x83) && (tmp_data[2] == 0x10) && ((tmp_data[1] == 0x2a) || (tmp_data[1] == 0x2b) || (tmp_data[1] == 0x2d) || (tmp_data[1] == 0x2e))) {
 			if (tmp_data[1] == 0x2a) {
 				strlcpy((*kp_private_ts)->chip_name, HX_83102A_SERIES_PWON, 30);
-				I("%s:detect IC HX83102A successfully\n", __func__);
+				KI("%s:detect IC HX83102A successfully\n", __func__);
 			} else if (tmp_data[1] == 0x2b) {
 				strlcpy((*kp_private_ts)->chip_name, HX_83102B_SERIES_PWON, 30);
-				I("%s:detect IC HX83102B successfully\n", __func__);
+				KI("%s:detect IC HX83102B successfully\n", __func__);
 			} else if (tmp_data[1] == 0x2d) {
 				strlcpy((*kp_private_ts)->chip_name, HX_83102D_SERIES_PWON, 30);
-				I("%s:detect IC HX83102D successfully\n", __func__);
+				KI("%s:detect IC HX83102D successfully\n", __func__);
 			} else {
 				strlcpy((*kp_private_ts)->chip_name, HX_83102E_SERIES_PWON, 30);
-				I("%s:detect IC HX83102E successfully\n", __func__);
+				KI("%s:detect IC HX83102E successfully\n", __func__);
 			}
 
 			ret = kp_himax_mcu_in_cmd_struct_init();

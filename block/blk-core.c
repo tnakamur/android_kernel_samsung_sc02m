@@ -3559,6 +3559,7 @@ void blk_post_runtime_resume(struct request_queue *q, int err)
 EXPORT_SYMBOL(blk_post_runtime_resume);
 #endif
 
+/* IOPP-sio-v1.0.4.4 */
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 /*********************************
  * debugfs functions

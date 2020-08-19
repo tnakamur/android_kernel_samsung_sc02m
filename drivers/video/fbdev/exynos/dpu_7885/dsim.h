@@ -250,6 +250,7 @@ struct dsim_lcd_driver {
 #if defined(CONFIG_EXYNOS_DOZE)
 	int (*doze)(struct dsim_device *dsim);
 #endif
+	int (*match)(void *maybe_unused);
 #if defined(CONFIG_LOGGING_BIGDATA_BUG)
 	unsigned int (*get_buginfo)(struct dsim_device *dsim);
 #endif

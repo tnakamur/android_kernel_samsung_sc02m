@@ -65,6 +65,16 @@
 #include "himax_platform_SPI.h"
 #endif
 
+#if defined(CONFIG_VBUS_NOTIFIER) || defined(CONFIG_MUIC_NOTIFIER)
+#include <linux/muic/muic.h>
+#include <linux/muic/muic_notifier.h>
+#include <linux/vbus_notifier.h>
+#endif
+
+#if defined(CONFIG_USB_TYPEC_MANAGER_NOTIFIER)
+#include <linux/usb/manager/usb_typec_manager_notifier.h>
+#endif
+
 #define HIMAX_DRIVER_VER "2.0.0.28_ABCD1234_01"
 
 #define FLASH_DUMP_FILE "/sdcard/HX_Flash_Dump.bin"
@@ -79,12 +89,12 @@
 #define HX_ESD_RECOVERY
 #define HX_TP_PROC_GUEST_INFO
 /*#define HX_NEW_EVENT_STACK_FORMAT*/
-/*#define HX_AUTO_UPDATE_FW*/
+#define HX_AUTO_UPDATE_FW
 /*#define HX_SMART_WAKEUP*/
 /*#define HX_GESTURE_TRACK*/
 /*#define HX_HIGH_SENSE*/
 /*#define HX_PALM_REPORT*/
-/*#define HX_USB_DETECT_GLOBAL*/
+#define HX_USB_DETECT_GLOBAL
 /*#define HX_USB_DETECT_CALLBACK*/
 /*#define HX_PROTOCOL_A*/				/* for MTK special platform.If turning on,it will report to system by using specific format. */
 /*#define HX_RESUME_HW_RESET*/
@@ -93,7 +103,7 @@
 /*#define HX_RESUME_SET_FW*/
 /*#define HX_EN_DYNAMIC_NAME*/	/* Support dynamic load fw name ,default is close */
 /*#define HX_PON_PIN_SUPPORT*/
-#define HX_PEN_FUNC_EN
+/*#define HX_PEN_FUNC_EN*/
 /*#define HX_CONTAINER_SPEED_UP*/	/*Independent threads run the notification chain notification function resume */
 #define SEC_FACTORY_MODE
 
@@ -140,6 +150,12 @@ int fb_notifier_callback(struct notifier_block *self,
 static void himax_ts_early_suspend(struct early_suspend *h);
 static void himax_ts_late_resume(struct early_suspend *h);
 #endif
+
+/*
+ * support_feature
+ * bit value should be made a promise with InputFramework.
+ */
+#define INPUT_FEATURE_ENABLE_SETTINGS_AOT	(1 << 0) /* Double tap wakeup settings */
 
 #define HX_MAX_WRITE_SZ    (64 * 1024 + 4)
 
@@ -270,8 +286,8 @@ struct sec_rawdata_buffs {
 
 #ifdef HX_FIX_TOUCH_INFO
 enum fix_touch_info {
-	FIX_HX_RX_NUM = 48,
-	FIX_HX_TX_NUM = 30,
+	FIX_HX_RX_NUM = 40,
+	FIX_HX_TX_NUM = 28,
 	FIX_HX_BT_NUM = 0,
 	FIX_HX_X_RES = 1200,
 	FIX_HX_Y_RES = 1920,
@@ -431,6 +447,7 @@ struct himax_ts_data {
 
 	int rst_gpio;
 	int use_irq;
+	struct pinctrl *pinctrl;
 	int (*power) (int on);
 	int pre_finger_data[10][6];		/*0: x, 1:y, 2:w, 3:mv_cnt, 4:major, 5:minor */
 	int p_x[10];
@@ -475,6 +492,17 @@ struct himax_ts_data {
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
+
+#ifdef CONFIG_MUIC_NOTIFIER
+	struct notifier_block muic_nb;
+#endif
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	struct notifier_block ccic_nb;
+#endif
+#ifdef CONFIG_VBUS_NOTIFIER
+	struct notifier_block vbus_nb;
+#endif
+
 	struct notifier_block reboot_notifier;
 
 	struct workqueue_struct *flash_wq;
@@ -592,5 +620,11 @@ int himax_report_data_init(void);
 
 int himax_dev_set(struct himax_ts_data *ts);
 int himax_input_register_device(struct input_dev *input_dev);
+int himax_pinctrl_configure(struct himax_ts_data *ts, bool active);
+
+#if defined(HX_USB_DETECT_GLOBAL)
+void himax_cable_detect_func(bool force_renew);
+extern bool USB_detect_flag;
+#endif
 
 #endif

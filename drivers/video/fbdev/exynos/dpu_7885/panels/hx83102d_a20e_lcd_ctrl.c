@@ -241,6 +241,10 @@ static int hx83102d_read_id(struct lcd_info *lcd)
 {
 	struct panel_private *priv = &lcd->dsim->priv;
 	int i, ret = 0;
+	struct decon_device *decon = get_decon_drvdata(0);
+	static char *LDI_BIT_DESC_ID[BITS_PER_BYTE * HX83102D_ID_LEN] = {
+		[0 ... 23] = "ID Read Fail",
+	};
 
 	lcd->id_info.value = 0;
 	priv->lcdconnected = lcd->connected = lcdtype ? 1 : 0;
@@ -254,6 +258,9 @@ static int hx83102d_read_id(struct lcd_info *lcd)
 	if (ret < 0 || !lcd->id_info.value) {
 		priv->lcdconnected = lcd->connected = 0;
 		dev_info(&lcd->ld->dev, "%s: connected lcd is invalid\n", __func__);
+
+		if (lcdtype && decon)
+			decon_abd_save_bit(&decon->abd, BITS_PER_BYTE * HX83102D_ID_LEN, cpu_to_be32(lcd->id_info.value), LDI_BIT_DESC_ID);
 	}
 
 	dev_info(&lcd->ld->dev, "%s: %x\n", __func__, cpu_to_be32(lcd->id_info.value));
@@ -269,8 +276,6 @@ static int hx83102d_displayon_late(struct lcd_info *lcd)
 	dev_info(&lcd->ld->dev, "%s\n", __func__);
 
 	DSI_WRITE(SEQ_DISPLAY_ON, ARRAY_SIZE(SEQ_DISPLAY_ON));
-
-	dsim_panel_set_brightness(lcd, 1);
 
 	return ret;
 }
@@ -364,9 +369,13 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (evdata->info->node)
 		return NOTIFY_DONE;
 
-	if (fb_blank == FB_BLANK_UNBLANK)
+	if (fb_blank == FB_BLANK_UNBLANK) {
+		mutex_lock(&lcd->lock);
 		hx83102d_displayon_late(lcd);
-	else if (fb_blank == FB_BLANK_POWERDOWN) {
+		mutex_unlock(&lcd->lock);
+
+		dsim_panel_set_brightness(lcd, 1);
+	} else if (fb_blank == FB_BLANK_POWERDOWN) {
 		s2dps01_array_write(lcd->blic_client, S2DPS01_EXIT, ARRAY_SIZE(S2DPS01_EXIT));
 
 		ret = gpio_request_one(lcd->gpio_lcd_3p0, GPIOF_OUT_INIT_LOW, "gpio_lcd_3p0");
@@ -661,4 +670,5 @@ struct dsim_lcd_driver hx83102d_mipi_lcd_driver = {
 	.displayon	= dsim_panel_displayon,
 	.suspend	= dsim_panel_suspend,
 };
+__XX_ADD_LCD_DRIVER(hx83102d_mipi_lcd_driver);
 

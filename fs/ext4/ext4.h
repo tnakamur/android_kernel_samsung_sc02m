@@ -2368,6 +2368,14 @@ int ext4_has_encryption_key(struct inode *inode);
 
 int ext4_get_encryption_info(struct inode *inode);
 
+#ifdef CONFIG_EXT4CRYPT_SDP
+int ext4_get_encryption_key(struct inode *inode,
+						struct ext4_encryption_key *key);
+int fscrypt_get_encryption_kek(struct inode *inode,
+						struct ext4_crypt_info *crypt_info,
+						struct ext4_encryption_key *kek);
+#endif
+
 static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
 {
 	return EXT4_I(inode)->i_crypt_info;

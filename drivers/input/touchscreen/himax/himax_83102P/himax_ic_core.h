@@ -142,6 +142,7 @@ extern unsigned long CFG_VER_MAJ_FLASH_ADDR;
 extern unsigned long CFG_VER_MIN_FLASH_ADDR;
 extern unsigned long CID_VER_MAJ_FLASH_ADDR;
 extern unsigned long CID_VER_MIN_FLASH_ADDR;
+extern unsigned long PANEL_VERSION_ADDR;
 
 extern unsigned long FW_VER_MAJ_FLASH_LENG;
 extern unsigned long FW_VER_MIN_FLASH_LENG;
@@ -149,6 +150,7 @@ extern unsigned long CFG_VER_MAJ_FLASH_LENG;
 extern unsigned long CFG_VER_MIN_FLASH_LENG;
 extern unsigned long CID_VER_MAJ_FLASH_LENG;
 extern unsigned long CID_VER_MIN_FLASH_LENG;
+extern unsigned long PANEL_VERSION_LENG;
 
 extern unsigned char IC_CHECKSUM;
 #ifdef HX_ESD_RECOVERY
@@ -319,7 +321,7 @@ struct hx_guest_info {
 #ifdef SEC_FACTORY_MODE
 	#define FW_EDGE_BORDER_ON						0x11
 	#define FW_EDGE_BORDER_OFF						0x00
-	#define FW_EDGE_BORDER_ADDR						0x10007ff8
+	#define FW_EDGE_BORDER_ADDR						0x10007ff4
 //	#define FW_CAL_ON								0x01
 //	#define FW_CAL_OFF								0x00
 //	#define FW_CAL_ADDR								0x10007088	/*bit[2] */

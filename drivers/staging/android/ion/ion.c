@@ -778,11 +778,14 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 		return ERR_PTR(-EINVAL);
 	}
 
-	down_read(&dev->lock);
 	heap_id_mask = ion_parse_heap_id(heap_id_mask, flags);
-	if (heap_id_mask == 0)
+	if (heap_id_mask == 0) {
+		trace_ion_alloc_fail(client->name, EINVAL, len,
+				align, heap_id_mask, flags);
 		return ERR_PTR(-EINVAL);
+	}
 
+	down_read(&dev->lock);
 	plist_for_each_entry(heap, &dev->heaps, node) {
 		/* if the caller didn't specify this heap id */
 		if (!((1 << heap->id) & heap_id_mask))

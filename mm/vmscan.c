@@ -1573,7 +1573,7 @@ static int current_may_throttle(void)
 		bdi_write_congested(current->backing_dev_info);
 }
 
-static inline bool need_memory_boosting(struct zone *zone);
+static inline bool need_memory_boosting(struct zone *zone, bool skip);
 
 /*
  * shrink_inactive_list() is a helper for shrink_zone().  It returns the number
@@ -1634,7 +1634,7 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	if (nr_taken == 0)
 		return 0;
 
-	if (need_memory_boosting(zone)) {
+	if (need_memory_boosting(zone, false)) {
 		force_reclaim = true;
 		ttu |= TTU_IGNORE_ACCESS;
 	}
@@ -2094,14 +2094,14 @@ static inline bool mem_boost_pgdat_wmark(struct zone *zone)
 	return zone_watermark_ok_safe(zone, 0, low_wmark_pages(zone), 0); //TODO: low, high, or (low + high)/2
 }
 
-static inline bool need_memory_boosting(struct zone *zone)
+static inline bool need_memory_boosting(struct zone *zone, bool skip)
 {
 	bool ret;
 
 	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME))
 		mem_boost_mode = NO_BOOST;
 
-	if (memory_boosting_disabled)
+	if (!skip && memory_boosting_disabled)
 		return false;
 
 	switch (mem_boost_mode) {
@@ -2215,7 +2215,7 @@ static void get_scan_count(struct lruvec *lruvec, int swappiness,
 		}
 	}
 
-	if (current_is_kswapd() && need_memory_boosting(zone)) {
+	if (current_is_kswapd() && need_memory_boosting(zone, true)) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}	

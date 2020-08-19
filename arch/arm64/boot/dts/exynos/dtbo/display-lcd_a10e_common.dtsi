@@ -1,19 +1,19 @@
 /*
  * SAMSUNG LCD Panel Device Tree Source
  *
- * Copyright (c) 2016 Samsung Electronics Co., Ltd.
+ * Copyright (c) Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
-*/
+ */
 
 / {
 	fragment@lcd {
 		target-path = "/";
 		__overlay__ {
-			decon_board: decon_board {
+			decon_board_hx83102d: decon_board_hx83102d {
 				gpio_lcd_3p0 = <&gpg1 2 0>;
 				gpio_lcd_rst = <&gpg2 0 0>;
 
@@ -39,7 +39,7 @@
 				};
 			};
 
-			hx83102d: hx83102d_hdp {
+			hx83102d: hx83102d {
 				mode = <0>; /* 0: video mode, 1: DP command mode, 2: MIPI command mode */
 				resolution = <720 1560>;
 				size = <62 135>;	/* 62.1 x 134.55 */
@@ -61,9 +61,20 @@
 				data_lane = <4>;	/* number of using data lane */
 				vt_compensation = <455>;	/* for difference between wordclk and vclk at video mode */
 				eotp_disabled = <1>;	/* 0:EOTP Enable, 1: EOTP Disable */
+				decon_board = <&decon_board_hx83102d>;
 			};
 		};
 	};
+};
+
+&dsim_0 {
+	lcd_info = <&hx83102d>;
+};
+
+&decon_f {
+	psr_mode = <0>;		/* 0: video mode, 1: DP command mode, 2: MIPI command mode */
+	trig_mode = <1>;	/* 0: hw trigger, 1: sw trigger */
+	dsi_mode = <0>;		/* 0: single dsi, 1: dual dsi */
 };
 
 &i2c2_bus {
@@ -84,13 +95,3 @@
 	};
 };
 
-&dsim_0 {
-	lcd_info = <&hx83102d>;
-	decon_board = <&decon_board>;
-};
-
-&decon_f {
-	psr_mode = <0>;	/* 0: video mode, 1: DP command mode, 2: MIPI command mode */
-	trig_mode = <1>;	/* 0: hw trigger, 1: sw trigger */
-	dsi_mode = <0>;	/* 0: single dsi, 1: dual dsi */
-};

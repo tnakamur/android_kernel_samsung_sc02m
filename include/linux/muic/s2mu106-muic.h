@@ -918,9 +918,14 @@ struct s2mu106_muic_data {
 
 	struct mutex muic_mutex;
 	struct mutex switch_mutex;
-	#if defined(CONFIG_HV_MUIC_S2MU106_AFC)
+#if defined(CONFIG_HV_MUIC_S2MU106_AFC)
 	struct mutex afc_mutex;
 #endif
+	struct delayed_work discharging_handler;
+	struct delayed_work discharging_start_handler;
+	struct workqueue_struct *discharging_wq;
+	struct workqueue_struct *discharging_start_wq;
+	int discharging;
 
 	struct mutex bcd_rescan_mutex;
 

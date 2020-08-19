@@ -3372,6 +3372,8 @@ static void cod3035x_gdet_adc_work(struct work_struct *work)
 			jackdet->water_det = false;
 			jackdet->jack_det = false;
 
+			queue_work(cod3035x->jack_det_wq, &cod3035x->jack_det_work);
+
 			if (cod3035x->is_suspend)
 				regcache_cache_only(cod3035x->regmap, true);
 		} else
@@ -4197,7 +4199,7 @@ static irqreturn_t cod3035x_ant_thread_isr(int irq, void *data)
 
 	mutex_unlock(&cod3035x->key_lock);
 
-	if (det_status_change && ant_case == 2) {
+	if (det_status_change && ant_case == 2 && curr_data) {
 		if (cod3035x->is_suspend)
 			regcache_cache_only(cod3035x->regmap, false);
 		cod3035x_jack_reset(cod3035x);
@@ -4685,8 +4687,13 @@ static void cod3035x_i2c_parse_dt(struct cod3035x_priv *cod3035x)
 
 	cod3035x->dtv_check_gpio = of_get_named_gpio(np, "dtv-check-gpio", 0);
 	if (cod3035x->dtv_check_gpio < 0) {
-		cod3035x->dtv_detect = false;
-		pr_warn("%s : not support dtv-check-gpio\n", __func__);
+		if (of_property_read_bool(np, "legacy-dtv-support")) {
+			cod3035x->dtv_detect = true;
+			pr_info("%s : legacy-dtv-support property detected.\n", __func__);
+		} else {
+			cod3035x->dtv_detect = false;
+			pr_warn("%s : not support dtv-check-gpio\n", __func__);
+		}
 	} else {
 		pr_info("%s : dtv-check-gpio = %d\n", __func__,
 			cod3035x->dtv_check_gpio);

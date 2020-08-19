@@ -299,7 +299,7 @@ static int p3_xfer(struct p3_data *p3_device, struct p3_ioctl_transfer *tr)
 		return -EFAULT;
 
 	if (tr->len > MAX_BUFFER_SIZE || !tr->len) {
-		P3_ERR_MSG("%s invalid size %u\n", __func__, tr->len);
+		P3_ERR_MSG("%s invalid size\n", __func__);
 		return -EMSGSIZE;
 	}
 
@@ -567,7 +567,7 @@ static ssize_t spip3_write(struct file *filp, const char *buf, size_t count,
 	p3_dev = filp->private_data;
 
 	if (count > MAX_BUFFER_SIZE) {
-		P3_ERR_MSG("%s invalid size %u\n", __func__, count);
+		P3_ERR_MSG("%s invalid size\n", __func__);
 		return -EMSGSIZE;
 	}
 	mutex_lock(&p3_dev->buffer_mutex);
@@ -601,7 +601,7 @@ static ssize_t spip3_read(struct file *filp, char *buf, size_t count,
 	unsigned char rx_buffer[MAX_BUFFER_SIZE] = {0x0, };
 
 	if (count > MAX_BUFFER_SIZE) {
-		P3_ERR_MSG("%s invalid size %u\n", __func__, count);
+		P3_ERR_MSG("%s invalid size\n", __func__);
 		return -EMSGSIZE;
 	}
 	P3_INFO_MSG("spip3_read count %zu - Enter\n", count);

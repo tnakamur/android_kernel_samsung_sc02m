@@ -19,6 +19,7 @@
 #include "five_state.h"
 #include "five_hooks.h"
 #include "five_cache.h"
+#include "five_dsms.h"
 
 enum task_integrity_state_cause {
 	STATE_CAUSE_UNKNOWN,
@@ -74,6 +75,33 @@ static const char *task_integrity_state_str(
 	}
 
 	return str;
+}
+
+static enum task_integrity_reset_cause state_to_reason_cause(
+		enum task_integrity_state_cause cause)
+{
+	enum task_integrity_reset_cause reset_cause;
+
+	switch (cause) {
+	case STATE_CAUSE_UNKNOWN:
+		reset_cause = CAUSE_UNKNOWN;
+		break;
+	case STATE_CAUSE_TAMPERED:
+		reset_cause = CAUSE_TAMPERED;
+		break;
+	case STATE_CAUSE_NOCERT:
+		reset_cause = CAUSE_NO_CERT;
+		break;
+	case STATE_CAUSE_MISMATCH_LABEL:
+		reset_cause = CAUSE_MISMATCH_LABEL;
+		break;
+	default:
+		/* Integrity is not NONE. */
+		reset_cause = CAUSE_UNSET;
+		break;
+	}
+
+	return reset_cause;
 }
 
 static int is_system_label(struct integrity_label *label)
@@ -319,8 +347,23 @@ void five_state_proceed(struct task_integrity *integrity,
 		is_newstate = set_next_state(iint, integrity, &task_result);
 
 	if (is_newstate) {
-		if (task_result.new_tint == INTEGRITY_NONE)
+		if (task_result.new_tint == INTEGRITY_NONE) {
+			task_integrity_set_reset_reason(integrity,
+				state_to_reason_cause(task_result.cause), file);
 			five_hook_integrity_reset(task);
+
+			if  (fn != BPRM_CHECK) {
+				char comm[TASK_COMM_LEN];
+				char *pathbuf = NULL;
+
+				five_dsms_reset_integrity(
+					get_task_comm(comm, task),
+					task_result.cause,
+					five_d_path(&file->f_path, &pathbuf));
+				if (pathbuf)
+					__putname(pathbuf);
+			}
+		}
 		five_audit_verbose(task, file, five_get_string_fn(fn),
 			task_result.prev_tint, task_result.new_tint,
 			task_integrity_state_str(task_result.cause),

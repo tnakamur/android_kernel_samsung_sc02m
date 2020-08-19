@@ -145,6 +145,7 @@ static unsigned long *kp_CFG_VER_MAJ_FLASH_ADDR;
 static unsigned long *kp_CFG_VER_MIN_FLASH_ADDR;
 static unsigned long *kp_CID_VER_MAJ_FLASH_ADDR;
 static unsigned long *kp_CID_VER_MIN_FLASH_ADDR;
+static unsigned long *kp_PANEL_VERSION_ADDR;
 
 static unsigned long *kp_FW_VER_MAJ_FLASH_LENG;
 static unsigned long *kp_FW_VER_MIN_FLASH_LENG;
@@ -152,6 +153,7 @@ static unsigned long *kp_CFG_VER_MAJ_FLASH_LENG;
 static unsigned long *kp_CFG_VER_MIN_FLASH_LENG;
 static unsigned long *kp_CID_VER_MAJ_FLASH_LENG;
 static unsigned long *kp_CID_VER_MIN_FLASH_LENG;
+static unsigned long *kp_PANEL_VERSION_LENG;
 
 #ifdef HX_AUTO_UPDATE_FW
 	static int *kp_g_i_FW_VER;
@@ -230,6 +232,7 @@ extern unsigned long CFG_VER_MAJ_FLASH_ADDR;
 extern unsigned long CFG_VER_MIN_FLASH_ADDR;
 extern unsigned long CID_VER_MAJ_FLASH_ADDR;
 extern unsigned long CID_VER_MIN_FLASH_ADDR;
+extern unsigned long PANEL_VERSION_ADDR;
 
 extern unsigned long FW_VER_MAJ_FLASH_LENG;
 extern unsigned long FW_VER_MIN_FLASH_LENG;
@@ -237,6 +240,7 @@ extern unsigned long CFG_VER_MAJ_FLASH_LENG;
 extern unsigned long CFG_VER_MIN_FLASH_LENG;
 extern unsigned long CID_VER_MAJ_FLASH_LENG;
 extern unsigned long CID_VER_MIN_FLASH_LENG;
+extern unsigned long PANEL_VERSION_LENG;
 
 #ifdef HX_AUTO_UPDATE_FW
 	extern int g_i_FW_VER;
@@ -340,6 +344,7 @@ static int32_t himax_ic_setup_external_symbols(void)
 	assert_on_symbol(CFG_VER_MIN_FLASH_ADDR);
 	assert_on_symbol(CID_VER_MAJ_FLASH_ADDR);
 	assert_on_symbol(CID_VER_MIN_FLASH_ADDR);
+	assert_on_symbol(PANEL_VERSION_ADDR);
 
 	assert_on_symbol(FW_VER_MAJ_FLASH_LENG);
 	assert_on_symbol(FW_VER_MIN_FLASH_LENG);
@@ -347,6 +352,7 @@ static int32_t himax_ic_setup_external_symbols(void)
 	assert_on_symbol(CFG_VER_MIN_FLASH_LENG);
 	assert_on_symbol(CID_VER_MAJ_FLASH_LENG);
 	assert_on_symbol(CID_VER_MIN_FLASH_LENG);
+	assert_on_symbol(PANEL_VERSION_LENG);
 
 #ifdef HX_AUTO_UPDATE_FW
 	assert_on_symbol(g_i_FW_VER);
